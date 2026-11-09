@@ -26,6 +26,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -48,12 +49,21 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.ame.polaris.schedule.oneHourLater
 import dev.ame.polaris.tasks.Task
 import dev.ame.polaris.tasks.TaskDao
+import dev.ame.polaris.ui.DateArrows
+import dev.ame.polaris.ui.LocalUndo
+import dev.ame.polaris.ui.PageHeader
+import dev.ame.polaris.ui.PagePadding
+import dev.ame.polaris.ui.PolarisIcons
+import dev.ame.polaris.ui.QuietIconButton
 import dev.ame.polaris.ui.TimeButton
 import dev.ame.polaris.util.hhmm
 import dev.ame.polaris.util.longDate
 import dev.ame.polaris.util.shortDate
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
+import dev.ame.polaris.ui.Gold
+import dev.ame.polaris.ui.GoldButton
+import dev.ame.polaris.ui.PolarisCard
 
 @Composable
 fun CalendarScreen(
@@ -64,8 +74,10 @@ fun CalendarScreen(
 ) {
     val state by vm.state.collectAsState()
     var adding by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<CalendarEvent?>(null) }
+    val undo = LocalUndo.current
 
-    BoxWithConstraints(modifier.fillMaxSize().padding(24.dp)) {
+    BoxWithConstraints(modifier.fillMaxSize().padding(PagePadding)) {
         val month: @Composable (Modifier) -> Unit = { m ->
             MonthView(
                 state = state,
@@ -80,7 +92,11 @@ fun CalendarScreen(
             DayPanel(
                 state = state,
                 onAdd = { adding = true },
-                onDeleteEvent = vm::deleteEvent,
+                onEditEvent = { editing = it },
+                onDeleteEvent = { event ->
+                    vm.deleteEvent(event.id)
+                    undo.offer("Event deleted") { vm.restoreEvent(event) }
+                },
                 onToggleTask = vm::toggleTask,
                 modifier = m,
             )
@@ -102,13 +118,23 @@ fun CalendarScreen(
         }
     }
 
-    if (adding) {
-        AddEventDialog(
+    if (adding || editing != null) {
+        val existing = editing
+        EventDialog(
+            existing = existing,
             date = state.selected,
-            onDismiss = { adding = false },
-            onSave = { title, start, end ->
-                vm.addEvent(title, state.selected, start, end)
+            onDismiss = { adding = false; editing = null },
+            onSave = { title, date, start, end ->
+                vm.saveEvent(existing, title, date, start, end)
                 adding = false
+                editing = null
+            },
+            onDelete = existing?.let { event ->
+                {
+                    editing = null
+                    vm.deleteEvent(event.id)
+                    undo.offer("Event deleted") { vm.restoreEvent(event) }
+                }
             },
         )
     }
@@ -127,18 +153,10 @@ private fun MonthView(
 ) {
     val colors = MaterialTheme.colorScheme
     Column(modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                monthTitle(state.month),
-                style = MaterialTheme.typography.headlineSmall,
-                color = colors.onBackground,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(onClick = onToday) { Text("Today") }
-            TextButton(onClick = onPrevious) { Text("‹", style = MaterialTheme.typography.titleLarge) }
-            TextButton(onClick = onNext) { Text("›", style = MaterialTheme.typography.titleLarge) }
+        PageHeader("Calendar", subtitle = monthTitle(state.month)) {
+            DateArrows(onToday = onToday, onPrevious = onPrevious, onNext = onNext)
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(16.dp))
 
         Row {
             WeekdayLabels.forEach {
@@ -191,7 +209,7 @@ private fun DayCell(
             .aspectRatio(1f)
             .padding(2.dp)
             .clip(shape)
-            .background(if (isSelected) colors.primary else Color.Transparent)
+            .then(if (isSelected) Modifier.background(Gold.Shine) else Modifier)
             .then(if (isToday && !isSelected) Modifier.border(1.dp, colors.primary, shape) else Modifier)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -227,7 +245,8 @@ private fun Dot(color: Color) {
 private fun DayPanel(
     state: CalendarUiState,
     onAdd: () -> Unit,
-    onDeleteEvent: (String) -> Unit,
+    onDeleteEvent: (CalendarEvent) -> Unit,
+    onEditEvent: (CalendarEvent) -> Unit,
     onToggleTask: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -240,30 +259,37 @@ private fun DayPanel(
                 color = colors.onBackground,
                 modifier = Modifier.weight(1f),
             )
-            Button(onClick = onAdd) { Text("Add event") }
+            GoldButton(onClick = onAdd) {
+                Icon(PolarisIcons.Add, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                Text("Add event")
+            }
         }
         Spacer(Modifier.height(12.dp))
 
         if (state.selectedEvents.isEmpty() && state.selectedTasks.isEmpty()) {
-            Text("Nothing planned.", color = colors.onSurfaceVariant)
+            Text(
+                "Nothing planned. Add an event, or give a task this due date.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.onSurfaceVariant,
+            )
         }
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             // Prefixed keys: an event and a task can never be confused for each other.
             items(state.selectedEvents, key = { "e-${it.id}" }) { event ->
-                EventRow(event, onDelete = { onDeleteEvent(event.id) })
+                EventRow(event, onClick = { onEditEvent(event) }, onDelete = { onDeleteEvent(event) }, Modifier.animateItem())
             }
             items(state.selectedTasks, key = { "t-${it.id}" }) { task ->
-                DueTaskRow(task, onToggle = { onToggleTask(task.id) })
+                DueTaskRow(task, onToggle = { onToggleTask(task.id) }, Modifier.animateItem())
             }
         }
     }
 }
 
 @Composable
-private fun EventRow(event: CalendarEvent, onDelete: () -> Unit) {
+private fun EventRow(event: CalendarEvent, onClick: () -> Unit, onDelete: () -> Unit, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
-    Card(Modifier.fillMaxWidth()) {
+    PolarisCard(modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 timeLabel(event),
@@ -272,16 +298,16 @@ private fun EventRow(event: CalendarEvent, onDelete: () -> Unit) {
                 color = colors.primary,
             )
             Text(event.title, modifier = Modifier.weight(1f), color = colors.onSurface)
-            TextButton(onClick = onDelete) { Text("✕", color = colors.onSurfaceVariant) }
+            QuietIconButton(PolarisIcons.Delete, "Delete event", onClick = onDelete)
         }
     }
 }
 
 /** A task due this day. Ticking it here is the same as ticking it on the Tasks page. */
 @Composable
-private fun DueTaskRow(task: Task, onToggle: () -> Unit) {
+private fun DueTaskRow(task: Task, onToggle: () -> Unit, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
-    Card(Modifier.fillMaxWidth()) {
+    PolarisCard(modifier.fillMaxWidth()) {
         Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Checkbox(
                 checked = task.done,
@@ -312,54 +338,4 @@ private fun timeLabel(event: CalendarEvent): String {
     val start = event.start ?: return "All day"
     val end = event.end ?: return hhmm(start)
     return "${hhmm(start)}–${hhmm(end)}"
-}
-
-// ---------- Add event dialog ----------
-
-@Composable
-private fun AddEventDialog(
-    date: LocalDate,
-    onDismiss: () -> Unit,
-    onSave: (title: String, start: LocalTime?, end: LocalTime?) -> Unit,
-) {
-    var title by remember { mutableStateOf("") }
-    var allDay by remember { mutableStateOf(true) }
-    var start by remember { mutableStateOf(LocalTime(9, 0)) }
-    var end by remember { mutableStateOf(LocalTime(10, 0)) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("New event · ${shortDate(date)}") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    placeholder = { Text("Title") },
-                    singleLine = true,
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = allDay, onCheckedChange = { allDay = it })
-                    Text("All day")
-                }
-                if (!allDay) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TimeButton("Start", start, onPick = {
-                            start = it
-                            // Keep the end after the start.
-                            if (end <= it) end = it.oneHourLater()
-                        })
-                        TimeButton("End", end, onPick = { end = it })
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onSave(title, start.takeUnless { allDay }, end.takeUnless { allDay }) },
-                enabled = title.isNotBlank(),
-            ) { Text("Save") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
 }

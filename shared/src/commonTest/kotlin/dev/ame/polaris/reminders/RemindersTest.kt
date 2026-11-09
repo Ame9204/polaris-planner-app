@@ -72,6 +72,39 @@ class PlanRemindersTest {
     }
 
     @Test
+    fun aTasksOwnReminderReplacesTheDueDateOne() {
+        val plan = planReminders(
+            from = mon, to = tue,
+            events = emptyList(),
+            tasks = listOf(
+                Task("t1", "Call bank", due = mon, createdAt = 1, remindAt = LocalDateTime(2026, 11, 9, 15, 30)),
+                Task("t2", "No due date", createdAt = 2, remindAt = LocalDateTime(2026, 11, 10, 8, 0)),
+                Task("t3", "Done", createdAt = 3, done = true, remindAt = LocalDateTime(2026, 11, 9, 10, 0)),
+            ),
+            blocksByDay = emptyMap(),
+        )
+        assertEquals(
+            listOf("Call bank" to LocalDateTime(2026, 11, 9, 15, 30), "No due date" to LocalDateTime(2026, 11, 10, 8, 0)),
+            plan.map { it.title to it.at },
+        )
+    }
+
+    @Test
+    fun eachBlockUsesItsOwnReminderSetting() {
+        val blocks = listOf(
+            ScheduleBlock("a", "At start", LocalTime(7, 0), LocalTime(8, 0), days = 127, createdAt = 1, remindMinutesBefore = 0),
+            ScheduleBlock("b", "Ten before", LocalTime(9, 0), LocalTime(10, 0), days = 127, createdAt = 2, remindMinutesBefore = 10),
+            ScheduleBlock("c", "Off", LocalTime(11, 0), LocalTime(12, 0), days = 127, createdAt = 3, remindMinutesBefore = null),
+        )
+        val plan = planReminders(mon, mon, emptyList(), emptyList(), mapOf(mon to blocks))
+        assertEquals(
+            listOf("At start" to LocalDateTime(2026, 11, 9, 7, 0), "Ten before" to LocalDateTime(2026, 11, 9, 8, 50)),
+            plan.map { it.title to it.at },
+        )
+        assertEquals("Starts at 09:00 (in 10 min)", plan[1].text)
+    }
+
+    @Test
     fun repeatingBlocksHaveADifferentKeyEachDay() {
         val gym = ScheduleBlock("b", "Gym", LocalTime(7, 0), LocalTime(8, 0), days = 127, createdAt = 1)
         val plan = planReminders(mon, tue, emptyList(), emptyList(), mapOf(mon to listOf(gym), tue to listOf(gym)))

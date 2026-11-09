@@ -34,6 +34,7 @@ import dev.ame.polaris.util.hhmm
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Instant
+import dev.ame.polaris.ui.GoldButton
 
 /** The weather shown in the Overview header. Tap it to change the place or unit. */
 @Composable
@@ -119,7 +120,7 @@ fun WeatherSettingsDialog(
                         keyboardActions = KeyboardActions(onSearch = { onSearch(query) }),
                         modifier = Modifier.weight(1f),
                     )
-                    Button(onClick = { onSearch(query) }, enabled = query.trim().length >= 2 && !state.searching) {
+                    GoldButton(onClick = { onSearch(query) }, enabled = query.trim().length >= 2 && !state.searching) {
                         Text(if (state.searching) "…" else "Search")
                     }
                 }

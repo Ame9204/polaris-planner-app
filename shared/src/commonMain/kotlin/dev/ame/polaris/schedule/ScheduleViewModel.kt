@@ -2,6 +2,9 @@ package dev.ame.polaris.schedule
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dev.ame.polaris.calendar.CalendarEvent
+import dev.ame.polaris.calendar.EventDao
+import dev.ame.polaris.calendar.buildEvent
 import dev.ame.polaris.util.newId
 import dev.ame.polaris.util.nowMillis
 import dev.ame.polaris.util.today
@@ -24,21 +27,32 @@ import kotlinx.datetime.plus
 
 enum class ScheduleView { Day, Week }
 
+/** One column of the timeline: a day, its blocks, and its calendar events. */
+data class ScheduleDay(
+    val date: LocalDate,
+    val blocks: List<ScheduleBlock>,
+    val events: List<CalendarEvent> = emptyList(),
+) {
+    val allDayEvents: List<CalendarEvent> get() = events.filter { it.isAllDay }
+    val entries: List<TimelineEntry> get() = timelineEntries(blocks, events)
+}
+
 data class ScheduleUiState(
     /** The day being shown (Day view), or any day in the week being shown (Week view). */
     val date: LocalDate,
     val today: LocalDate,
     val view: ScheduleView = ScheduleView.Day,
-    /** Each shown day with its blocks: one day in Day view, Monday to Sunday in Week view. */
-    val days: List<Pair<LocalDate, List<ScheduleBlock>>> = listOf(date to emptyList()),
+    /** Each shown day with its blocks and events: one day in Day view, Monday to Sunday in Week view. */
+    val days: List<ScheduleDay> = listOf(ScheduleDay(date, emptyList())),
 ) {
-    val blocks: List<ScheduleBlock> get() = days.firstOrNull { it.first == date }?.second.orEmpty()
+    val blocks: List<ScheduleBlock> get() = days.firstOrNull { it.date == date }?.blocks.orEmpty()
     val items: List<TimelineItem> get() = timeline(blocks)
     val isToday: Boolean get() = date == today
 }
 
 class ScheduleViewModel(
     private val dao: ScheduleDao,
+    private val eventDao: EventDao,
     private val today: LocalDate = today(),
 ) : ViewModel() {
 
@@ -53,13 +67,21 @@ class ScheduleViewModel(
     val state: StateFlow<ScheduleUiState> = combine(date, view) { d, v -> d to v }
         .flatMapLatest { (d, v) ->
             when (v) {
+                // Blocks and the Calendar's events, watched together: change either and this updates.
                 ScheduleView.Day ->
-                    dao.observeForDay(d, d.dayOfWeek.bit())
-                        .map { ScheduleUiState(d, today, v, listOf(d to it)) }
+                    combine(dao.observeForDay(d, d.dayOfWeek.bit()), eventDao.observeBetween(d, d)) { blocks, events ->
+                        ScheduleUiState(d, today, v, listOf(ScheduleDay(d, blocks, events)))
+                    }
                 ScheduleView.Week -> {
                     val week = weekOf(d)
-                    dao.observeForRange(week.first(), week.last()).map { all ->
-                        ScheduleUiState(d, today, v, week.map { day -> day to all.filter { it.happensOn(day) } })
+                    combine(
+                        dao.observeForRange(week.first(), week.last()),
+                        eventDao.observeBetween(week.first(), week.last()),
+                    ) { blocks, events ->
+                        ScheduleUiState(
+                            d, today, v,
+                            week.map { day -> ScheduleDay(day, blocks.filter { it.happensOn(day) }, events.filter { it.date == day }) },
+                        )
                     }
                 }
             }
@@ -98,6 +120,7 @@ class ScheduleViewModel(
         end: LocalTime,
         days: Set<DayOfWeek>,
         onDate: LocalDate? = null,
+        remindMinutesBefore: Int? = 0,
     ) {
         val clean = title.trim()
         if (clean.isEmpty() || end <= start) return
@@ -110,11 +133,32 @@ class ScheduleViewModel(
             days = bits,
             date = if (bits == 0) existing?.date ?: onDate ?: date.value else null,
             createdAt = existing?.createdAt ?: nowMillis(),
+            remindMinutesBefore = remindMinutesBefore,
         )
         viewModelScope.launch { dao.upsert(block) }
     }
 
     fun delete(id: String) {
         viewModelScope.launch { dao.delete(id) }
+    }
+
+    // ---- Calendar events shown on the timeline ----
+
+    fun saveEvent(existing: CalendarEvent?, title: String, date: LocalDate, start: LocalTime?, end: LocalTime?) {
+        val event = buildEvent(existing, title, date, start, end) ?: return
+        viewModelScope.launch { eventDao.upsert(event) }
+    }
+
+    fun deleteEvent(id: String) {
+        viewModelScope.launch { eventDao.delete(id) }
+    }
+
+    fun restoreEvent(event: CalendarEvent) {
+        viewModelScope.launch { eventDao.upsert(event) }
+    }
+
+    /** Puts a deleted block back, on every day it repeated (for Undo). */
+    fun restore(block: ScheduleBlock) {
+        viewModelScope.launch { dao.upsert(block) }
     }
 }

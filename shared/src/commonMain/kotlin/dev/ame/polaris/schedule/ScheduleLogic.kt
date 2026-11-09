@@ -1,5 +1,6 @@
 package dev.ame.polaris.schedule
 
+import dev.ame.polaris.calendar.CalendarEvent
 import dev.ame.polaris.util.shortDate
 import dev.ame.polaris.util.titleCase
 import kotlinx.datetime.DateTimeUnit
@@ -118,57 +119,96 @@ fun weekLabel(week: List<LocalDate>): String {
 // ---------- Drawing the day as a timeline ----------
 
 /**
- * A block plus where it goes on the timeline. Overlapping blocks share the width:
- * [laneCount] columns side by side, and this block sits in column [lane] (0 = left).
+ * Something drawn on the timeline: one of your blocks, or a timed calendar event.
+ * Both have a start and end, so they share one layout and sit side by side when they overlap.
  */
-data class PlacedBlock(val block: ScheduleBlock, val lane: Int, val laneCount: Int)
+sealed interface TimelineEntry {
+    val start: LocalTime
+    val end: LocalTime
+    val createdAt: Long
+
+    data class Block(val block: ScheduleBlock) : TimelineEntry {
+        override val start get() = block.start
+        override val end get() = block.end
+        override val createdAt get() = block.createdAt
+    }
+
+    /** Only timed events go on the timeline; all-day ones go in the strip above it. */
+    data class Event(val event: CalendarEvent) : TimelineEntry {
+        override val start get() = event.start ?: LocalTime(0, 0)
+        override val end get() = eventEnd(event)
+        override val createdAt get() = event.createdAt
+    }
+}
+
+/** Events without an end time are drawn 30 minutes long (but never past midnight). */
+fun eventEnd(event: CalendarEvent): LocalTime {
+    event.end?.let { return it }
+    val start = event.start ?: return LocalTime(23, 59)
+    val seconds = minOf(start.toSecondOfDay() + 30 * 60, 24 * 3600 - 60)
+    return LocalTime.fromSecondOfDay(seconds)
+}
+
+/** A day's blocks plus its timed events, ready to lay out. */
+fun timelineEntries(blocks: List<ScheduleBlock>, events: List<CalendarEvent>): List<TimelineEntry> =
+    blocks.map { TimelineEntry.Block(it) } + events.filter { it.start != null }.map { TimelineEntry.Event(it) }
 
 /**
- * Splits overlapping blocks into side-by-side lanes, like a calendar app's day view.
- * Blocks that don't overlap anything get the full width. Each block takes the leftmost
- * lane that's free when it starts; every block in an overlapping group gets the same
+ * An entry plus where it goes. Overlapping entries share the width:
+ * [laneCount] columns side by side, and this one sits in column [lane] (0 = left).
+ */
+data class Placed<T>(val item: T, val lane: Int, val laneCount: Int)
+
+/**
+ * Splits overlapping entries into side-by-side lanes, like a calendar app's day view.
+ * Entries that don't overlap anything get the full width. Each one takes the leftmost
+ * lane that's free when it starts; every entry in an overlapping group gets the same
  * lane count, so their widths line up.
  */
-fun layoutLanes(blocks: List<ScheduleBlock>): List<PlacedBlock> {
-    val sorted = blocks.sortedWith(compareBy({ it.start }, { it.createdAt }))
-    val result = mutableListOf<PlacedBlock>()
+fun layoutEntries(entries: List<TimelineEntry>): List<Placed<TimelineEntry>> {
+    val sorted = entries.sortedWith(compareBy({ it.start }, { it.createdAt }))
+    val result = mutableListOf<Placed<TimelineEntry>>()
 
-    val group = mutableListOf<Pair<ScheduleBlock, Int>>() // blocks overlapping each other, with their lane
-    val laneEnds = mutableListOf<LocalTime>()               // when each lane in the group frees up
+    val group = mutableListOf<Pair<TimelineEntry, Int>>() // entries overlapping each other, with their lane
+    val laneEnds = mutableListOf<LocalTime>()              // when each lane in the group frees up
     var groupEnd: LocalTime? = null
 
     fun closeGroup() {
-        group.forEach { (block, lane) -> result += PlacedBlock(block, lane, laneEnds.size) }
+        group.forEach { (entry, lane) -> result += Placed(entry, lane, laneEnds.size) }
         group.clear()
         laneEnds.clear()
     }
 
-    for (block in sorted) {
+    for (entry in sorted) {
         val end = groupEnd
-        if (end != null && block.start >= end) {
+        if (end != null && entry.start >= end) {
             closeGroup() // nothing still running: start a new group
             groupEnd = null
         }
-        var lane = laneEnds.indexOfFirst { it <= block.start }
+        var lane = laneEnds.indexOfFirst { it <= entry.start }
         if (lane == -1) {
-            laneEnds += block.end
+            laneEnds += entry.end
             lane = laneEnds.lastIndex
         } else {
-            laneEnds[lane] = block.end
+            laneEnds[lane] = entry.end
         }
-        group += block to lane
+        group += entry to lane
         val current = groupEnd
-        groupEnd = if (current == null || block.end > current) block.end else current
+        groupEnd = if (current == null || entry.end > current) entry.end else current
     }
     closeGroup()
     return result
 }
 
-/** "12 AM", "1 AM" … "12 PM", "1 PM" … "11 PM" */
-fun hourLabel(hour: Int): String {
-    val h12 = if (hour % 12 == 0) 12 else hour % 12
-    return "$h12 ${if (hour < 12) "AM" else "PM"}"
-}
+/** Blocks only (kept for the tests and anything that only has blocks). */
+data class PlacedBlock(val block: ScheduleBlock, val lane: Int, val laneCount: Int)
+
+fun layoutLanes(blocks: List<ScheduleBlock>): List<PlacedBlock> =
+    layoutEntries(blocks.map { TimelineEntry.Block(it) })
+        .map { PlacedBlock((it.item as TimelineEntry.Block).block, it.lane, it.laneCount) }
+
+/** "00:00", "01:00" … "23:00" (24-hour, like every other time in the app). */
+fun hourLabel(hour: Int): String = "${hour.toString().padStart(2, '0')}:00"
 
 fun minuteOfDay(time: LocalTime): Int = time.toSecondOfDay() / 60
 

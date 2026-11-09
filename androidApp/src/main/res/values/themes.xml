@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        What Android shows while the app starts, before Compose draws anything.
+        Dark with a black background, so there's no white flash on launch.
+    -->
+    <style name="Theme.Polaris" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FF000000</item>
+        <item name="android:colorBackground">#FF000000</item>
+    </style>
+</resources>

@@ -1,20 +1,16 @@
 package dev.ame.polaris.overview
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.MaterialTheme
@@ -50,6 +46,7 @@ import dev.ame.polaris.weather.WeatherUiState
 import dev.ame.polaris.weather.WeatherViewModel
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
+import dev.ame.polaris.ui.PolarisCard
 
 /** Most rows a card shows before saying "+ N more". */
 private const val MaxRows = 6
@@ -143,8 +140,7 @@ private fun Header(today: LocalDate, now: LocalTime, weather: WeatherUiState, on
 @Composable
 private fun NowAndNextCard(nn: NowAndNext) {
     if (nn.now == null && nn.next == null) return
-    val colors = MaterialTheme.colorScheme
-    Card(Modifier.fillMaxWidth(), border = BorderStroke(1.dp, colors.primary)) {
+    PolarisCard(Modifier.fillMaxWidth(), highlighted = true) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             nn.now?.let {
                 LabeledLine("Now", "${it.title} · until ${hhmm(it.end)}", highlight = true)
@@ -184,7 +180,7 @@ private fun GlanceCard(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Card(modifier) {
+    PolarisCard(modifier) {
         Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(

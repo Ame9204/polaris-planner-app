@@ -3,6 +3,7 @@ package dev.ame.polaris.tasks
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
 
 /**
  * One task, and also one row in the `tasks` table (that's what @Entity means).
@@ -18,4 +19,9 @@ data class Task(
     val due: LocalDate? = null,
     /** Milliseconds since 1970; keeps tasks in the order you added them. */
     val createdAt: Long,
+    /**
+     * Your own "remind me at" time, if you set one. It replaces the default
+     * reminder on the due date. Works for tasks without a due date too.
+     */
+    val remindAt: LocalDateTime? = null,
 )

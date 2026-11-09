@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
 import kotlin.time.Clock
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -49,5 +50,15 @@ class TasksViewModel(private val dao: TaskDao) : ViewModel() {
 
     fun delete(id: String) {
         viewModelScope.launch { dao.delete(id) }
+    }
+
+    /** Sets the task's own reminder, or removes it with null. */
+    fun setReminder(id: String, at: LocalDateTime?) {
+        viewModelScope.launch { dao.setReminder(id, at) }
+    }
+
+    /** Puts a deleted task back exactly as it was (for Undo). */
+    fun restore(task: Task) {
+        viewModelScope.launch { dao.upsert(task) }
     }
 }

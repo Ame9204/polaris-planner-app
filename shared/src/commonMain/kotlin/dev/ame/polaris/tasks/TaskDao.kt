@@ -5,6 +5,7 @@ import androidx.room.Query
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
 
 /**
  * DAO = Data Access Object: every way the app reads or writes tasks.
@@ -31,6 +32,10 @@ interface TaskDao {
 
     @Query("UPDATE tasks SET done = NOT done WHERE id = :id")
     suspend fun toggleDone(id: String)
+
+    /** Sets (or with null, removes) a task's own reminder time. */
+    @Query("UPDATE tasks SET remindAt = :at WHERE id = :id")
+    suspend fun setReminder(id: String, at: LocalDateTime?)
 
     @Query("DELETE FROM tasks WHERE id = :id")
     suspend fun delete(id: String)

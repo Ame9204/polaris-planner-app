@@ -122,8 +122,31 @@ class ScheduleLogicTest {
     }
 
     @Test
-    fun hourLabelsUseAmPm() {
-        assertEquals(listOf("12 AM", "1 AM", "11 AM", "12 PM", "1 PM", "11 PM"), listOf(0, 1, 11, 12, 13, 23).map(::hourLabel))
+    fun eventsAndBlocksShareLanes() {
+        val work = block("Work", LocalTime(9, 0), LocalTime(17, 0))
+        val dentist = dev.ame.polaris.calendar.CalendarEvent("e", "Dentist", kotlinx.datetime.LocalDate(2026, 11, 9), LocalTime(14, 0), createdAt = 1)
+        val placed = layoutEntries(timelineEntries(listOf(work), listOf(dentist)))
+        val byName = placed.associate {
+            val name = when (val e = it.item) {
+                is TimelineEntry.Block -> e.block.title
+                is TimelineEntry.Event -> e.event.title
+            }
+            name to (it.lane to it.laneCount)
+        }
+        assertEquals((0 to 2), byName["Work"])
+        assertEquals((1 to 2), byName["Dentist"])
+    }
+
+    @Test
+    fun eventsWithoutAnEndAreHalfAnHour() {
+        val day = kotlinx.datetime.LocalDate(2026, 11, 9)
+        assertEquals(LocalTime(14, 30), eventEnd(dev.ame.polaris.calendar.CalendarEvent("e", "x", day, LocalTime(14, 0), createdAt = 0)))
+        assertEquals(LocalTime(23, 59), eventEnd(dev.ame.polaris.calendar.CalendarEvent("e", "x", day, LocalTime(23, 50), createdAt = 0)))
+    }
+
+    @Test
+    fun hourLabelsAre24Hour() {
+        assertEquals(listOf("00:00", "01:00", "11:00", "12:00", "13:00", "23:00"), listOf(0, 1, 11, 12, 13, 23).map(::hourLabel))
     }
 
     @Test

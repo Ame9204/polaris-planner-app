@@ -66,7 +66,7 @@ class ReminderEngine(
             from = from,
             to = to,
             events = events.observeBetween(from, to).first(),
-            tasks = tasks.observeDueBetween(from, to).first(),
+            tasks = tasks.observeAll().first(), // planReminders picks the ones in range
             blocksByDay = days.associateWith { schedule.observeForDay(it, it.dayOfWeek.bit()).first() },
             rules = rules,
         ).map { it to it.at.toInstant(zone) }

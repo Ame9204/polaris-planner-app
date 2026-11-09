@@ -13,14 +13,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -41,12 +44,22 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.ame.polaris.ui.EmptyState
+import dev.ame.polaris.ui.ItemGap
+import dev.ame.polaris.ui.LocalUndo
+import dev.ame.polaris.ui.PageHeader
+import dev.ame.polaris.ui.PagePadding
+import dev.ame.polaris.ui.PolarisIcons
+import dev.ame.polaris.ui.QuietIconButton
+import dev.ame.polaris.ui.ReadableWidth
 import androidx.navigationevent.NavigationEventInfo
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import com.mikepenz.markdown.m3.Markdown
 import dev.ame.polaris.util.today
 import kotlinx.datetime.LocalDate
+import dev.ame.polaris.ui.GoldButton
+import dev.ame.polaris.ui.PolarisCard
 
 @Composable
 fun NotesScreen(
@@ -96,40 +109,43 @@ fun NotesScreen(
 @Composable
 private fun NotesList(state: NotesUiState, today: LocalDate, vm: NotesViewModel, modifier: Modifier) {
     val colors = MaterialTheme.colorScheme
-    Column(modifier.padding(24.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "Notes",
-                style = MaterialTheme.typography.headlineMedium,
-                color = colors.onBackground,
-                modifier = Modifier.weight(1f),
-            )
-            Button(onClick = vm::create) { Text("New note") }
+    Column(modifier.padding(PagePadding)) {
+        PageHeader("Notes", subtitle = if (state.notes.isEmpty()) null else "${state.notes.size} notes") {
+            GoldButton(onClick = vm::create) {
+                Icon(PolarisIcons.Add, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                Text("New")
+            }
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(16.dp))
         OutlinedTextField(
             value = state.query,
             onValueChange = vm::setQuery,
-            placeholder = { Text("Search") },
+            placeholder = { Text("Search notes") },
+            leadingIcon = { Icon(PolarisIcons.Search, contentDescription = null) },
+            trailingIcon = if (state.query.isNotEmpty()) {
+                { QuietIconButton(PolarisIcons.Close, "Clear search", onClick = { vm.setQuery("") }) }
+            } else null,
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(12.dp))
 
         if (state.notes.isEmpty()) {
-            Text(
-                if (state.query.isBlank()) "No notes yet." else "No notes match \"${state.query.trim()}\".",
-                color = colors.onSurfaceVariant,
-            )
+            if (state.query.isBlank()) {
+                EmptyState(PolarisIcons.Notes, "No notes yet", "Tap New to write one. Notes use Markdown: # headings, **bold**, - lists.")
+            } else {
+                EmptyState(PolarisIcons.Search, "Nothing found", "No notes contain \"${state.query.trim()}\".")
+            }
         }
 
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(verticalArrangement = ItemGap) {
             items(state.notes, key = { it.id }) { note ->
                 NoteRow(
                     note = note,
                     today = today,
                     isSelected = note.id == state.selectedId,
                     onClick = { vm.select(note.id) },
+                    modifier = Modifier.animateItem(),
                 )
             }
         }
@@ -137,15 +153,17 @@ private fun NotesList(state: NotesUiState, today: LocalDate, vm: NotesViewModel,
 }
 
 @Composable
-private fun NoteRow(note: Note, today: LocalDate, isSelected: Boolean, onClick: () -> Unit) {
+private fun NoteRow(note: Note, today: LocalDate, isSelected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        border = if (isSelected) BorderStroke(1.dp, colors.primary) else null,
+    PolarisCard(
+        modifier = modifier.fillMaxWidth().clickable(onClick = onClick),
+        highlighted = isSelected,
     ) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (note.pinned) Text("★ ", color = colors.primary)
+                if (note.pinned) {
+                    Icon(PolarisIcons.Pin, contentDescription = "Pinned", tint = colors.primary, modifier = Modifier.padding(end = 4.dp).size(16.dp))
+                }
                 Text(
                     displayTitle(note),
                     modifier = Modifier.weight(1f),
@@ -187,16 +205,36 @@ private fun NoteEditor(note: Note, vm: NotesViewModel, onBack: (() -> Unit)?, mo
         var body by remember { mutableStateOf(note.body) }
         // Existing notes open as rendered Markdown; new ones open ready to type.
         var preview by remember { mutableStateOf(note.body.isNotBlank()) }
-        var confirmDelete by remember { mutableStateOf(false) }
+        val undo = LocalUndo.current
 
-        Column(modifier.fillMaxHeight().padding(horizontal = 16.dp, vertical = 16.dp)) {
+        Column(modifier.fillMaxHeight().padding(horizontal = 16.dp, vertical = 16.dp).widthIn(max = ReadableWidth)) {
             // Toolbar
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (onBack != null) TextButton(onClick = onBack) { Text("‹ Notes") }
+                if (onBack != null) {
+                    IconButton(onClick = onBack) { Icon(PolarisIcons.Back, contentDescription = "Back to notes") }
+                }
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = { preview = !preview }) { Text(if (preview) "Edit" else "Preview") }
-                TextButton(onClick = { vm.togglePinned(note.id) }) { Text(if (note.pinned) "★ Pinned" else "☆ Pin") }
-                TextButton(onClick = { confirmDelete = true }) { Text("Delete", color = colors.error) }
+                TextButton(onClick = { preview = !preview }) {
+                    Icon(
+                        if (preview) PolarisIcons.Edit else PolarisIcons.Preview,
+                        contentDescription = null,
+                        modifier = Modifier.padding(end = 6.dp),
+                    )
+                    Text(if (preview) "Edit" else "Preview")
+                }
+                IconButton(onClick = { vm.togglePinned(note.id) }) {
+                    Icon(
+                        PolarisIcons.Pin,
+                        contentDescription = if (note.pinned) "Unpin" else "Pin",
+                        tint = if (note.pinned) colors.primary else colors.onSurfaceVariant,
+                    )
+                }
+                QuietIconButton(PolarisIcons.Delete, "Delete note", onClick = {
+                    // Keep what's typed so far, so Undo brings back the latest text.
+                    val deleted = note.copy(title = title, body = body)
+                    vm.delete(note.id)
+                    undo.offer("Note deleted") { vm.restore(deleted) }
+                })
             }
 
             TextField(
@@ -237,20 +275,6 @@ private fun NoteEditor(note: Note, vm: NotesViewModel, onBack: (() -> Unit)?, mo
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-        }
-
-        if (confirmDelete) {
-            AlertDialog(
-                onDismissRequest = { confirmDelete = false },
-                title = { Text("Delete this note?") },
-                text = { Text("\"${displayTitle(note.copy(title = title, body = body))}\" will be gone for good.") },
-                confirmButton = {
-                    TextButton(onClick = { confirmDelete = false; vm.delete(note.id) }) {
-                        Text("Delete", color = colors.error)
-                    }
-                },
-                dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
-            )
         }
     }
 }

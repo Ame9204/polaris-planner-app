@@ -4,6 +4,7 @@ import dev.ame.polaris.calendar.CalendarEvent
 import dev.ame.polaris.schedule.ScheduleBlock
 import dev.ame.polaris.tasks.Task
 import dev.ame.polaris.util.hhmm
+import dev.ame.polaris.util.shortDate
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
@@ -24,9 +25,9 @@ data class ReminderRules(
     val eventMinutesBefore: Int? = 10,
     /** All-day events: at this time on the day. */
     val allDayEventsAt: LocalTime? = LocalTime(8, 0),
-    /** Unfinished tasks: at this time on their due date. */
+    /** Unfinished tasks without their own reminder: at this time on their due date. */
     val tasksDueAt: LocalTime? = LocalTime(9, 0),
-    /** Schedule blocks: when they start. */
+    /** Schedule blocks: as set on each block (at start, some minutes before, or off). False = never. */
     val scheduleBlocks: Boolean = true,
 ) {
     companion object {
@@ -74,12 +75,23 @@ fun planReminders(
         }
     }
 
-    val taskTime = rules.tasksDueAt
-    if (taskTime != null) {
-        for (task in tasks) {
+    for (task in tasks) {
+        if (task.done) continue
+        val own = task.remindAt
+        if (own != null) {
+            // The task's own reminder replaces the default due-date one.
+            if (own.date !in days) continue
+            out += Reminder(
+                "task:${task.id}",
+                own,
+                task.title,
+                task.due?.let { "Task · due ${shortDate(it)}" } ?: "Task reminder",
+            )
+        } else {
             val due = task.due ?: continue
-            if (task.done || due !in days) continue
-            out += Reminder("task:${task.id}", due.atTime(taskTime), "Task due today", task.title)
+            val at = rules.tasksDueAt ?: continue
+            if (due !in days) continue
+            out += Reminder("task:${task.id}", due.atTime(at), "Task due today", task.title)
         }
     }
 
@@ -87,12 +99,13 @@ fun planReminders(
         for ((day, blocks) in blocksByDay) {
             if (day !in days) continue
             for (block in blocks) {
+                val before = block.remindMinutesBefore ?: continue // reminder off for this block
                 // Repeating blocks happen on many days, so the day is part of the key.
                 out += Reminder(
                     "block:${block.id}:$day",
-                    day.atTime(block.start),
+                    day.atTime(block.start).minusMinutes(before),
                     block.title,
-                    "Now until ${hhmm(block.end)}",
+                    if (before == 0) "Now until ${hhmm(block.end)}" else "Starts at ${hhmm(block.start)} (in $before min)",
                 )
             }
         }

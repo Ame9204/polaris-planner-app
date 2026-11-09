@@ -1,5 +1,6 @@
 package dev.ame.polaris.schedule
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import kotlinx.datetime.LocalDate
@@ -24,6 +25,12 @@ data class ScheduleBlock(
     /** For a one-off block: the day it happens. Null for repeating blocks. */
     val date: LocalDate? = null,
     val createdAt: Long,
+    /**
+     * Remind this many minutes before the block starts: 0 = when it starts, null = no reminder.
+     * defaultValue = "0": blocks made before this setting existed keep reminding at start.
+     */
+    @ColumnInfo(defaultValue = "0")
+    val remindMinutesBefore: Int? = 0,
 ) {
     val repeats: Boolean get() = days != 0
 }

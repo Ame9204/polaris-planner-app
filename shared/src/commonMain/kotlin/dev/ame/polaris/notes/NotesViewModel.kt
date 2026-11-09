@@ -97,6 +97,11 @@ class NotesViewModel(private val dao: NoteDao) : ViewModel() {
         viewModelScope.launch { writeLock.withLock { dao.delete(id) } }
     }
 
+    /** Puts a deleted note back (for Undo). */
+    fun restore(note: Note) {
+        viewModelScope.launch { writeLock.withLock { dao.upsert(note) } }
+    }
+
     /** Leaving a note you never typed in deletes it, so "New note" then back leaves no empty notes. */
     private fun leaveCurrent() {
         val id = selectedId.value ?: return

@@ -1,5 +1,7 @@
 package dev.ame.polaris.schedule
 
+import dev.ame.polaris.calendar.CalendarEvent
+import dev.ame.polaris.calendar.FakeEventDao
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -22,6 +24,7 @@ import kotlin.test.assertTrue
 class ScheduleViewModelTest {
 
     private val dao = FakeScheduleDao()
+    private val events = FakeEventDao()
     private val monday = LocalDate(2026, 11, 9) // a Monday
 
     @BeforeTest
@@ -31,7 +34,7 @@ class ScheduleViewModelTest {
     fun tearDown() = Dispatchers.resetMain()
 
     private fun TestScope.watchedViewModel(): ScheduleViewModel {
-        val vm = ScheduleViewModel(dao, monday)
+        val vm = ScheduleViewModel(dao, events, monday)
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
         return vm
     }
@@ -99,7 +102,7 @@ class ScheduleViewModelTest {
         val vm = watchedViewModel()
         vm.setView(ScheduleView.Week)
         vm.next()
-        assertEquals(LocalDate(2026, 11, 16), vm.state.value.days.first().first) // next Monday
+        assertEquals(LocalDate(2026, 11, 16), vm.state.value.days.first().date) // next Monday
     }
 
     @Test
@@ -117,6 +120,55 @@ class ScheduleViewModelTest {
         vm.openDay(LocalDate(2026, 11, 13))
         assertEquals(ScheduleView.Day, vm.state.value.view)
         assertEquals(LocalDate(2026, 11, 13), vm.state.value.date)
+    }
+
+    // ---- Events on the timeline ----
+
+    @Test
+    fun calendarEventsShowOnTheirDay() = runTest {
+        events.upsert(CalendarEvent("e1", "Dentist", monday, LocalTime(14, 0), createdAt = 1))
+        events.upsert(CalendarEvent("e2", "Holiday", monday, createdAt = 2))
+        events.upsert(CalendarEvent("e3", "Tuesday thing", LocalDate(2026, 11, 10), LocalTime(9, 0), createdAt = 3))
+        val vm = watchedViewModel()
+
+        val today = vm.state.value.days.single()
+        assertEquals(listOf("Dentist", "Holiday"), today.events.map { it.title })
+        assertEquals(listOf("Holiday"), today.allDayEvents.map { it.title })
+        // Only the timed event goes on the timeline itself
+        assertEquals(listOf("Dentist"), today.entries.filterIsInstance<TimelineEntry.Event>().map { it.event.title })
+    }
+
+    @Test
+    fun weekViewSortsEventsIntoDays() = runTest {
+        events.upsert(CalendarEvent("e", "Tuesday thing", LocalDate(2026, 11, 10), LocalTime(9, 0), createdAt = 1))
+        val vm = watchedViewModel()
+        vm.setView(ScheduleView.Week)
+        val byDay = vm.state.value.days.associate { it.date.dayOfWeek to it.events.map { e -> e.title } }
+        assertEquals(listOf("Tuesday thing"), byDay[DayOfWeek.TUESDAY])
+        assertTrue(byDay[DayOfWeek.MONDAY]!!.isEmpty())
+    }
+
+    @Test
+    fun editingAnEventFromTheScheduleKeepsItsId() = runTest {
+        val original = CalendarEvent("e", "Dentist", monday, LocalTime(14, 0), createdAt = 1)
+        events.upsert(original)
+        val vm = watchedViewModel()
+
+        vm.saveEvent(original, "Dentist (moved)", monday, LocalTime(15, 0), null)
+
+        val saved = events.items.value.single()
+        assertEquals("e", saved.id)
+        assertEquals(LocalTime(15, 0), saved.start)
+    }
+
+    @Test
+    fun blockReminderSettingIsSaved() = runTest {
+        val vm = watchedViewModel()
+        vm.save(null, "Gym", LocalTime(7, 0), LocalTime(8, 0), AllDays, remindMinutesBefore = 10)
+        vm.save(null, "Sleep", LocalTime(23, 0), LocalTime(23, 59), AllDays, remindMinutesBefore = null)
+        val byTitle = dao.items.value.associate { it.title to it.remindMinutesBefore }
+        assertEquals(10, byTitle["Gym"])
+        assertNull(byTitle["Sleep"])
     }
 
     @Test

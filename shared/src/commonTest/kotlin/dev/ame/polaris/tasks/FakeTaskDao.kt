@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
 
 /** An in-memory stand-in for the real database, so ViewModel tests run instantly. */
 class FakeTaskDao : TaskDao {
@@ -27,6 +28,10 @@ class FakeTaskDao : TaskDao {
 
     override suspend fun toggleDone(id: String) {
         items.update { list -> list.map { if (it.id == id) it.copy(done = !it.done) else it } }
+    }
+
+    override suspend fun setReminder(id: String, at: LocalDateTime?) {
+        items.update { list -> list.map { if (it.id == id) it.copy(remindAt = at) else it } }
     }
 
     override suspend fun delete(id: String) {

@@ -88,24 +88,22 @@ class CalendarViewModel(
         month.value = date.firstOfMonth()
     }
 
-    fun addEvent(title: String, date: LocalDate, start: LocalTime? = null, end: LocalTime? = null) {
-        val clean = title.trim()
-        if (clean.isEmpty()) return
-        // No end without a start, and an end before the start is dropped.
-        val fixedEnd = if (start == null || (end != null && end < start)) null else end
-        val event = CalendarEvent(
-            id = newId(),
-            title = clean,
-            date = date,
-            start = start,
-            end = fixedEnd,
-            createdAt = nowMillis(),
-        )
+    fun addEvent(title: String, date: LocalDate, start: LocalTime? = null, end: LocalTime? = null) =
+        saveEvent(null, title, date, start, end)
+
+    /** Adds a new event, or updates [existing]. */
+    fun saveEvent(existing: CalendarEvent?, title: String, date: LocalDate, start: LocalTime?, end: LocalTime?) {
+        val event = buildEvent(existing, title, date, start, end) ?: return
         viewModelScope.launch { eventDao.upsert(event) }
     }
 
     fun deleteEvent(id: String) {
         viewModelScope.launch { eventDao.delete(id) }
+    }
+
+    /** Puts a deleted event back (for Undo). */
+    fun restoreEvent(event: CalendarEvent) {
+        viewModelScope.launch { eventDao.upsert(event) }
     }
 
     fun toggleTask(id: String) {

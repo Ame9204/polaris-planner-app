@@ -17,6 +17,7 @@ import dev.ame.polaris.schedule.ScheduleDao
 import dev.ame.polaris.tasks.Task
 import dev.ame.polaris.tasks.TaskDao
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 
 /**
@@ -33,15 +34,17 @@ import kotlinx.datetime.LocalTime
  *  3: + schedule_blocks (Schedule)
  *  4: + notes (Notes)
  *  5: + settings (key/value: weather location, units, cached weather)
+ *  6: + tasks.remindAt, schedule_blocks.remindMinutesBefore (per-item reminders)
  */
 @Database(
     entities = [Task::class, CalendarEvent::class, ScheduleBlock::class, Note::class, Setting::class],
-    version = 5,
+    version = 6,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
         AutoMigration(from = 3, to = 4),
         AutoMigration(from = 4, to = 5),
+        AutoMigration(from = 5, to = 6),
     ],
 )
 @TypeConverters(Converters::class)
@@ -76,6 +79,13 @@ class Converters {
 
     @TypeConverter
     fun toTime(text: String?): LocalTime? = text?.let { LocalTime.parse(it) }
+
+    /** Date and time together, like "2026-11-12T14:30". */
+    @TypeConverter
+    fun fromDateTime(dateTime: LocalDateTime?): String? = dateTime?.toString()
+
+    @TypeConverter
+    fun toDateTime(text: String?): LocalDateTime? = text?.let { LocalDateTime.parse(it) }
 }
 
 /** Shared finishing step; each platform only decides *where* the file lives. */
