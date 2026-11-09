@@ -31,7 +31,7 @@ fun TimeButton(
     var open by remember { mutableStateOf(false) }
 
     OutlinedButton(onClick = { open = true }, modifier = modifier) {
-        Text("$label ${hhmm(time)}")
+        Text(if (label.isBlank()) hhmm(time) else "$label ${hhmm(time)}")
     }
 
     if (open) {

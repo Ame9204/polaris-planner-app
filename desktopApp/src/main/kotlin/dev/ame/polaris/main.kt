@@ -55,7 +55,7 @@ fun main() {
     }
 }
 
-/** A gold four-pointed star, drawn in code so no image file is needed. */
+/** A tangerine four-pointed star, drawn in code so no image file is needed. */
 private object StarIcon : Painter() {
     override val intrinsicSize = Size(256f, 256f)
 
@@ -73,6 +73,6 @@ private object StarIcon : Painter() {
             lineTo(w * 0.41f, h * 0.41f)
             close()
         }
-        drawPath(star, Color(0xFFFCD512))
+        drawPath(star, Color(0xFFE9A25A)) // tangerine
     }
 }

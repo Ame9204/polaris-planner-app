@@ -1,7 +1,9 @@
 package dev.ame.polaris.schedule
 
 import dev.ame.polaris.calendar.CalendarEvent
+import dev.ame.polaris.util.WeekOrder
 import dev.ame.polaris.util.shortDate
+import dev.ame.polaris.util.startOfWeek
 import dev.ame.polaris.util.titleCase
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.DayOfWeek
@@ -37,7 +39,7 @@ fun repeatLabel(bits: Int): String {
         AllDays -> "Every day"
         Weekdays -> "Weekdays"
         Weekend -> "Weekends"
-        else -> days.sortedBy { it.isoDayNumber }.joinToString { it.shortName() }
+        else -> days.sortedBy { WeekOrder.indexOf(it) }.joinToString { it.shortName() }
     }
 }
 
@@ -99,10 +101,10 @@ fun timeline(blocks: List<ScheduleBlock>, minFreeMinutes: Int = 15): List<Timeli
 fun ScheduleBlock.happensOn(day: LocalDate): Boolean =
     date == day || (days and day.dayOfWeek.bit()) != 0
 
-/** The Monday-to-Sunday week that contains [date]. */
+/** The week (7 days, from the app's first day of the week) that contains [date]. */
 fun weekOf(date: LocalDate): List<LocalDate> {
-    val monday = date.minus(date.dayOfWeek.isoDayNumber - 1, DateTimeUnit.DAY)
-    return List(7) { monday.plus(it, DateTimeUnit.DAY) }
+    val first = date.startOfWeek()
+    return List(7) { first.plus(it, DateTimeUnit.DAY) }
 }
 
 /** "9 – 15 Nov", or "30 Nov – 6 Dec" when the week crosses months. */
@@ -151,7 +153,8 @@ fun eventEnd(event: CalendarEvent): LocalTime {
 
 /** A day's blocks plus its timed events, ready to lay out. */
 fun timelineEntries(blocks: List<ScheduleBlock>, events: List<CalendarEvent>): List<TimelineEntry> =
-    blocks.map { TimelineEntry.Block(it) } + events.filter { it.start != null }.map { TimelineEntry.Event(it) }
+    blocks.map { TimelineEntry.Block(it) } +
+        events.filter { it.start != null && !it.isMultiDay }.map { TimelineEntry.Event(it) }
 
 /**
  * An entry plus where it goes. Overlapping entries share the width:

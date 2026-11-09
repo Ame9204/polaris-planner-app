@@ -33,7 +33,8 @@ data class ScheduleDay(
     val blocks: List<ScheduleBlock>,
     val events: List<CalendarEvent> = emptyList(),
 ) {
-    val allDayEvents: List<CalendarEvent> get() = events.filter { it.isAllDay }
+    /** All-day and multi-day events: shown in the strip above the timeline, like Google Calendar. */
+    val allDayEvents: List<CalendarEvent> get() = events.filter { it.isAllDay || it.isMultiDay }
     val entries: List<TimelineEntry> get() = timelineEntries(blocks, events)
 }
 
@@ -80,7 +81,7 @@ class ScheduleViewModel(
                     ) { blocks, events ->
                         ScheduleUiState(
                             d, today, v,
-                            week.map { day -> ScheduleDay(day, blocks.filter { it.happensOn(day) }, events.filter { it.date == day }) },
+                            week.map { day -> ScheduleDay(day, blocks.filter { it.happensOn(day) }, events.filter { it.occursOn(day) }) },
                         )
                     }
                 }
@@ -144,8 +145,15 @@ class ScheduleViewModel(
 
     // ---- Calendar events shown on the timeline ----
 
-    fun saveEvent(existing: CalendarEvent?, title: String, date: LocalDate, start: LocalTime?, end: LocalTime?) {
-        val event = buildEvent(existing, title, date, start, end) ?: return
+    fun saveEvent(
+        existing: CalendarEvent?,
+        title: String,
+        date: LocalDate,
+        start: LocalTime?,
+        end: LocalTime?,
+        endDate: LocalDate? = null,
+    ) {
+        val event = buildEvent(existing, title, date, start, end, endDate) ?: return
         viewModelScope.launch { eventDao.upsert(event) }
     }
 

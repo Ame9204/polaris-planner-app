@@ -65,6 +65,7 @@ import dev.ame.polaris.ui.TimeButton
 import dev.ame.polaris.ui.rememberCurrentTime
 import dev.ame.polaris.util.hhmm
 import dev.ame.polaris.util.longDate
+import dev.ame.polaris.util.WeekOrder
 import dev.ame.polaris.util.shortDate
 import kotlinx.coroutines.flow.first
 import kotlinx.datetime.DayOfWeek
@@ -208,8 +209,8 @@ private fun EditEventDialog(
         existing = event,
         date = event.date,
         onDismiss = onDone,
-        onSave = { title, date, start, end ->
-            vm.saveEvent(event, title, date, start, end)
+        onSave = { title, date, start, end, endDate ->
+            vm.saveEvent(event, title, date, start, end, endDate)
             onDone()
         },
         onDelete = {
@@ -516,16 +517,21 @@ private fun EventBox(
 }
 
 /** A dashed gold outline (Modifier.border can't do dashes, so it's drawn by hand). */
-private fun Modifier.dashedGoldOutline(shape: RoundedCornerShape): Modifier = drawBehind {
+@Composable
+private fun Modifier.dashedGoldOutline(shape: RoundedCornerShape): Modifier {
+    // Read the colour here; drawBehind runs while drawing, outside composition.
+    val color = MaterialTheme.colorScheme.primary
+    return drawBehind {
     val stroke = 1.5.dp.toPx()
     val radius = shape.topStart.toPx(size, this)
     drawRoundRect(
-        brush = Gold.Edge,
+        color = color,
         topLeft = Offset(stroke / 2, stroke / 2),
         size = Size(size.width - stroke, size.height - stroke),
         cornerRadius = CornerRadius(radius),
         style = Stroke(width = stroke, pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()))),
     )
+    }
 }
 
 // ---------- Add / edit dialog ----------
@@ -584,7 +590,7 @@ private fun BlockDialog(
                     FilterChip(selected = days == Weekdays, onClick = { days = Weekdays }, label = { Text("Weekdays") })
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    DayOfWeek.entries.forEach { day ->
+                    WeekOrder.forEach { day ->
                         FilterChip(
                             selected = day in days,
                             onClick = { days = if (day in days) days - day else days + day },

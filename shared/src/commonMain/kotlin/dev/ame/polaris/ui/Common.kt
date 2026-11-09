@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -30,6 +31,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import dev.ame.polaris.LocalPage
+import dev.ame.polaris.Palette
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -52,15 +55,32 @@ fun PageHeader(
     modifier: Modifier = Modifier,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
-    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground)
-            if (subtitle != null) {
-                // A gradient brush works on text too: the subtitle gets the same shine.
-                Text(subtitle, style = MaterialTheme.typography.bodyMedium.copy(brush = Gold.Shine))
+    // A solid panel in the page's colour, spec-sheet style: a small "02" in the corner,
+    // a dot, then the title in big wide capitals and the subtitle as a mono caption.
+    val page = LocalPage.current
+    PolarisCard(modifier.fillMaxWidth(), color = page.color) {
+        Column(Modifier.padding(start = 20.dp, end = 8.dp, top = 14.dp, bottom = 14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(page.number, style = MaterialTheme.typography.labelMedium)
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    Modifier.size(7.dp).clip(CircleShape)
+                        .background(if (page.color == Palette.Terracotta) Palette.Ink else Palette.Terracotta)
+                )
+                Spacer(Modifier.weight(1f))
+                // The panel's colour as a hex code, like "#EOA15E" in the reference
+                Text(hexCode(page.color), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(end = 12.dp))
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(title.uppercase(), style = MaterialTheme.typography.headlineMedium)
+                    if (subtitle != null) {
+                        Text(subtitle.uppercase(), style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+                actions()
             }
         }
-        actions()
     }
 }
 

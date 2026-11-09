@@ -47,9 +47,26 @@ import dev.ame.polaris.weather.WeatherViewModel
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 import dev.ame.polaris.ui.PolarisCard
+import dev.ame.polaris.ui.Gold
+import dev.ame.polaris.ui.CardAlpha
+import dev.ame.polaris.schedule.layoutLanes
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import dev.ame.polaris.ui.Panel
+import kotlinx.datetime.number
+import dev.ame.polaris.ui.hexCode
+import dev.ame.polaris.ui.StatBox
+import dev.ame.polaris.ui.SpecFooter
+import dev.ame.polaris.ui.BigArrow
 
-/** Most rows a card shows before saying "+ N more". */
-private const val MaxRows = 6
 
 @Composable
 fun OverviewScreen(
@@ -79,13 +96,14 @@ fun OverviewScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Header(state.today, now, weather, onWeatherClick = { weatherDialog = true })
-            NowAndNextCard(nowAndNext(state.blocks, now))
+            StatsRow(todayStats(state.dueTasks, state.todayEvents, state.blocks, state.today, now))
+            NowAndNextCard(nowAndNext(state.blocks, now), now, state.today)
 
             val schedule: @Composable (Modifier) -> Unit = { m ->
                 ScheduleCard(state.blocks, now, onSeeAll = { onOpen(Page.Schedule) }, modifier = m)
             }
             val upcoming: @Composable (Modifier) -> Unit = { m ->
-                EventsCard(events, state.today, onSeeAll = { onOpen(Page.Calendar) }, modifier = m)
+                EventsCard(events, state.today, now, onSeeAll = { onOpen(Page.Calendar) }, modifier = m)
             }
             val tasks: @Composable (Modifier) -> Unit = { m ->
                 TasksCard(state.tasks, state.today, onComplete = vm::completeTask, onSeeAll = { onOpen(Page.Tasks) }, modifier = m)
@@ -125,10 +143,10 @@ fun OverviewScreen(
 private fun Header(today: LocalDate, now: LocalTime, weather: WeatherUiState, onWeatherClick: () -> Unit) {
     Row(verticalAlignment = Alignment.Top) {
         Column(Modifier.weight(1f)) {
-            Text(longDate(today), color = MaterialTheme.colorScheme.primary)
+            Text(longDate(today).uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             // Reads `now`, so the greeting changes by itself at 12:00 and 18:00.
             Text(
-                "${greetingFor(now.hour)}, Ame",
+                "${greetingFor(now.hour)}, Ame".uppercase(),
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.onBackground,
             )
@@ -137,35 +155,77 @@ private fun Header(today: LocalDate, now: LocalTime, weather: WeatherUiState, on
     }
 }
 
+/** Three big numbers in outlined boxes: tasks due, events today, blocks left. */
 @Composable
-private fun NowAndNextCard(nn: NowAndNext) {
-    if (nn.now == null && nn.next == null) return
-    PolarisCard(Modifier.fillMaxWidth(), highlighted = true) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            nn.now?.let {
-                LabeledLine("Now", "${it.title} · until ${hhmm(it.end)}", highlight = true)
+private fun StatsRow(stats: TodayStats) {
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        StatBox(stats.tasksDue, "Tasks due", Page.Tasks.color, Modifier.weight(1f))
+        StatBox(stats.eventsToday, "Events today", Page.Calendar.color, Modifier.weight(1f))
+        StatBox(stats.blocksLeft, "Blocks left", Page.Schedule.color, Modifier.weight(1f))
+    }
+}
+
+/**
+ * Always shown. What's on now (or "free time"), what's next, or, when nothing else is
+ * on today, a fun line instead. Decorated like a spec sheet: big arrow, barcode footer.
+ */
+@Composable
+private fun NowAndNextCard(nn: NowAndNext, now: LocalTime, today: LocalDate) {
+    PolarisCard(Modifier.fillMaxWidth(), color = Panel.Tangerine) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                // Same heading style as the other cards ("TODAY'S SCHEDULE", "UPCOMING EVENTS")
+                Text(
+                    "NOW / NEXT",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                BigArrow()
             }
-            nn.next?.let {
-                LabeledLine("Next", "${it.title} · ${hhmm(it.start)}", highlight = false)
+
+            val current = nn.now
+            val next = nn.next
+            if (current != null) {
+                LabeledLine("Now", current.title, "until ${hhmm(current.end)}", countdown = timeLeft(now, current.end), highlight = true)
+            } else if (next != null) {
+                LabeledLine("Now", "Free time", "until ${hhmm(next.start)}", countdown = "", highlight = false)
             }
+
+            if (next != null) {
+                val minutes = ((next.start.toSecondOfDay() - now.toSecondOfDay()) / 60).toLong()
+                LabeledLine("Next", next.title, "at ${hhmm(next.start)}", countdown = countdown(minutes), highlight = current == null)
+            } else if (current == null) {
+                // Nothing now and nothing next: a fun line in big type, changing every hour.
+                // (If something's on now, that's enough on its own.)
+                Text(idleLine(today, now.hour).uppercase(), style = MaterialTheme.typography.headlineSmall)
+            }
+
+            SpecFooter(left = hexCode(Panel.Tangerine), right = "NXT/${today.day.toString().padStart(2, '0')}.${today.month.number.toString().padStart(2, '0')}")
         }
     }
 }
 
+/** "Now  Work · until 17:00            1 h 20 min left" */
 @Composable
-private fun LabeledLine(label: String, text: String, highlight: Boolean) {
+private fun LabeledLine(label: String, title: String, detail: String, countdown: String, highlight: Boolean) {
     val colors = MaterialTheme.colorScheme
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-            label,
-            modifier = Modifier.width(48.dp),
+            label.uppercase(),
+            modifier = Modifier.width(52.dp),
             style = MaterialTheme.typography.labelMedium,
-            color = if (highlight) colors.primary else colors.onSurfaceVariant,
+            color = if (highlight) colors.onSurface else colors.onSurfaceVariant,
         )
+        Column(Modifier.weight(1f)) {
+            Text(title, color = colors.onSurface, fontWeight = if (highlight) FontWeight.SemiBold else null)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+        }
+        // The countdown, big enough to read at a glance
         Text(
-            text,
+            countdown.uppercase(),
+            style = if (highlight) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleSmall,
             color = colors.onSurface,
-            fontWeight = if (highlight) FontWeight.SemiBold else null,
         )
     }
 }
@@ -176,20 +236,21 @@ private fun LabeledLine(label: String, text: String, highlight: Boolean) {
 @Composable
 private fun GlanceCard(
     title: String,
+    color: Color,
     onSeeAll: () -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    PolarisCard(modifier) {
-        Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 16.dp)) {
+    PolarisCard(modifier, color = color) {
+        Column(Modifier.padding(start = 20.dp, end = 8.dp, top = 10.dp, bottom = 20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    title,
+                    title.uppercase(),
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                TextButton(onClick = onSeeAll) { Text("See all ›") }
+                TextButton(onClick = onSeeAll) { Text("SEE ALL ↗") }
             }
             Column(Modifier.padding(end = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 content()
@@ -203,32 +264,45 @@ private fun EmptyLine(text: String) {
     Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
 }
 
-@Composable
-private fun MoreLine(hidden: Int) {
-    if (hidden > 0) {
-        Text("+ $hidden more", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-    }
-}
-
 /** Time on the left (fixed width so titles line up), then the text. */
 @Composable
-private fun TimedRow(time: String, title: String, timeHighlight: Boolean = false, dim: Boolean = false) {
+private fun TimedRow(
+    time: String,
+    title: String,
+    timeHighlight: Boolean = false,
+    dim: Boolean = false,
+    trailing: String? = null,
+) {
     val colors = MaterialTheme.colorScheme
-    Row {
+    Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             time,
             modifier = Modifier.width(112.dp),
             style = MaterialTheme.typography.bodySmall,
             color = if (timeHighlight) colors.primary else colors.onSurfaceVariant,
         )
-        Text(title, color = if (dim) colors.onSurfaceVariant else colors.onSurface)
+        Text(
+            title,
+            modifier = Modifier.weight(1f),
+            color = if (dim) colors.onSurfaceVariant else colors.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (trailing != null) {
+            Text(trailing, style = MaterialTheme.typography.labelMedium, color = colors.primary)
+        }
     }
 }
 
 @Composable
 private fun ScheduleCard(blocks: List<ScheduleBlock>, now: LocalTime, onSeeAll: () -> Unit, modifier: Modifier) {
-    GlanceCard("Today's schedule", onSeeAll, modifier) {
-        if (blocks.isEmpty()) EmptyLine("Nothing scheduled today.")
+    GlanceCard("Today's schedule", Panel.Sage, onSeeAll, modifier) {
+        if (blocks.isEmpty()) {
+            EmptyLine("Nothing scheduled today.")
+        } else {
+            ScheduleBar(blocks, now)
+            Spacer(Modifier.height(4.dp))
+        }
         blocks.forEach { block ->
             TimedRow(
                 time = "${hhmm(block.start)}–${hhmm(block.end)}",
@@ -241,15 +315,20 @@ private fun ScheduleCard(blocks: List<ScheduleBlock>, now: LocalTime, onSeeAll: 
 }
 
 @Composable
-private fun EventsCard(events: List<CalendarEvent>, today: LocalDate, onSeeAll: () -> Unit, modifier: Modifier) {
-    GlanceCard("Upcoming events", onSeeAll, modifier) {
-        if (events.isEmpty()) EmptyLine("No events in the next $UpcomingDays days.")
-        events.take(MaxRows).forEach { event ->
-            val day = dayLabel(event.date, today)
+private fun EventsCard(events: List<CalendarEvent>, today: LocalDate, now: LocalTime, onSeeAll: () -> Unit, modifier: Modifier) {
+    GlanceCard("Upcoming events", Panel.Terracotta, onSeeAll, modifier) {
+        if (events.isEmpty()) EmptyLine("No upcoming events.")
+        events.take(GlanceCount).forEach { event ->
+            // Ongoing multi-day events count as today
+            val day = if (event.date < today) "Today" else dayLabel(event.date, today)
             val time = event.start?.let(::hhmm) ?: "All day"
-            TimedRow(time = "$day · $time", title = event.title, timeHighlight = event.date == today)
+            TimedRow(
+                time = "$day · $time",
+                title = event.title,
+                timeHighlight = event.occursOn(today),
+                trailing = eventCountdown(event, today, now),
+            )
         }
-        MoreLine(events.size - MaxRows)
     }
 }
 
@@ -261,10 +340,11 @@ private fun TasksCard(
     onSeeAll: () -> Unit,
     modifier: Modifier,
 ) {
-    val colors = MaterialTheme.colorScheme
-    GlanceCard("Tasks due", onSeeAll, modifier) {
-        if (tasks.isEmpty()) EmptyLine("Nothing due this week.")
-        tasks.take(MaxRows).forEach { task ->
+    GlanceCard("Tasks due", Panel.Stone, onSeeAll, modifier) {
+        // Read the colours *inside* the panel, so they're the panel's ink, not the page's white
+        val colors = MaterialTheme.colorScheme
+        if (tasks.isEmpty()) EmptyLine("Nothing due.")
+        tasks.take(GlanceCount).forEach { task ->
             val due = task.due ?: return@forEach
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // Ticking a task completes it; it then drops off this list.
@@ -275,7 +355,7 @@ private fun TasksCard(
                 )
                 Text(task.title, modifier = Modifier.weight(1f), color = colors.onSurface)
                 Text(
-                    if (due < today) "Overdue" else dayLabel(due, today),
+                    dueCountdown(due, today),
                     style = MaterialTheme.typography.bodySmall,
                     color = when {
                         due < today -> colors.error
@@ -285,6 +365,92 @@ private fun TasksCard(
                 )
             }
         }
-        MoreLine(tasks.size - MaxRows)
+    }
+}
+
+// ---------- Today's schedule as a bar ----------
+
+/**
+ * The day as one horizontal bar: each block is a segment placed by its real times, so
+ * you see the shape of the day at a glance. Past blocks are faded, the current one is
+ * shiny gold, and a gold line marks now. Overlapping blocks stack in thinner rows.
+ */
+@Composable
+private fun ScheduleBar(blocks: List<ScheduleBlock>, now: LocalTime) {
+    val colors = MaterialTheme.colorScheme
+    val hours = remember(blocks) { barHours(blocks) }
+    val placed = remember(blocks) { layoutLanes(blocks) }
+    val barHeight = 36.dp
+    val shape = RoundedCornerShape(8.dp)
+
+    Column {
+        BoxWithConstraints(
+            Modifier.fillMaxWidth().height(barHeight).clip(shape).background(colors.onSurface.copy(alpha = 0.10f)),
+        ) {
+            val width = maxWidth
+
+            // Faint line every hour, so slots line up with the labels below
+            for (h in hours.first + 1 until hours.second) {
+                val x = width * barFraction(LocalTime(h, 0), hours)
+                Box(Modifier.offset(x = x).width(1.dp).fillMaxHeight().background(colors.onSurface.copy(alpha = 0.12f)))
+            }
+
+            placed.forEach { p ->
+                val b = p.block
+                val x = width * barFraction(b.start, hours)
+                val w = (width * barFraction(b.end, hours) - x).coerceAtLeast(3.dp)
+                val segmentHeight = barHeight / p.laneCount
+                val isNow = b.isHappeningAt(now)
+                val isPast = b.end <= now
+                Box(
+                    Modifier
+                        .offset(x = x, y = segmentHeight * p.lane)
+                        .width(w)
+                        .height(segmentHeight)
+                        .padding(1.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .then(
+                            when {
+                                isNow -> Modifier.background(Gold.Shine)
+                                isPast -> Modifier.background(colors.onSurfaceVariant.copy(alpha = 0.18f))
+                                else -> Modifier.background(colors.primary.copy(alpha = 0.28f))
+                            }
+                        ),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    // Only label segments wide enough to fit a word
+                    if (w >= 44.dp && segmentHeight >= 18.dp) {
+                        Text(
+                            b.title,
+                            modifier = Modifier.padding(horizontal = 6.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isNow) colors.onPrimary else colors.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Clip,
+                        )
+                    }
+                }
+            }
+
+            // Now marker
+            val nowX = width * barFraction(now, hours)
+            if (now.hour >= hours.first && now.hour < hours.second) {
+                Box(Modifier.offset(x = nowX - 1.dp).width(2.dp).fillMaxHeight().background(colors.onBackground))
+            }
+        }
+
+        // Hour labels every 3 hours under the bar
+        BoxWithConstraints(Modifier.fillMaxWidth().height(16.dp)) {
+            val width = maxWidth
+            for (h in hours.first..hours.second step 3) {
+                val x = width * barFraction(LocalTime(minOf(h, 23), if (h == 24) 59 else 0), hours)
+                Text(
+                    h.toString().padStart(2, '0'),
+                    modifier = Modifier.offset(x = (x - 8.dp).coerceIn(0.dp, width - 16.dp)),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.onSurfaceVariant,
+                )
+            }
+        }
     }
 }

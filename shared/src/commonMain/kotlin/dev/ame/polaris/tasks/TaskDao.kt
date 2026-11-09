@@ -26,6 +26,10 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE done = 0 AND due IS NOT NULL AND due <= :to ORDER BY due, createdAt")
     fun observeOpenDueUntil(to: LocalDate): Flow<List<Task>>
 
+    /** The [limit] most urgent unfinished tasks with a due date: overdue first, then soonest. */
+    @Query("SELECT * FROM tasks WHERE done = 0 AND due IS NOT NULL ORDER BY due, createdAt LIMIT :limit")
+    fun observeNextDue(limit: Int): Flow<List<Task>>
+
     /** Insert, or replace if a task with the same id exists. */
     @Upsert
     suspend fun upsert(task: Task)

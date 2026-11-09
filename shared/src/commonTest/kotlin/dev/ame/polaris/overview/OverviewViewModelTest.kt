@@ -59,7 +59,7 @@ class OverviewViewModelTest {
         val state = watchedViewModel().state.value
 
         assertEquals(listOf("Work"), state.blocks.map { it.title })
-        assertEquals(listOf("Dentist"), state.events.map { it.title })
+        assertEquals(listOf("Dentist", "Too far"), state.events.map { it.title }) // no 7-day limit any more
         assertEquals(listOf("Overdue", "Friday"), state.tasks.map { it.title })
     }
 

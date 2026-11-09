@@ -62,7 +62,8 @@ class CalendarViewModel(
                     selected = sel,
                     today = today,
                     days = days,
-                    events = events.groupBy { it.date },
+                    // A multi-day event is listed under every day it covers
+                    events = days.associateWith { day -> events.filter { it.occursOn(day) } }.filterValues { it.isNotEmpty() },
                     tasks = tasks.filter { it.due != null }.groupBy { it.due!! },
                 )
             }
@@ -92,8 +93,15 @@ class CalendarViewModel(
         saveEvent(null, title, date, start, end)
 
     /** Adds a new event, or updates [existing]. */
-    fun saveEvent(existing: CalendarEvent?, title: String, date: LocalDate, start: LocalTime?, end: LocalTime?) {
-        val event = buildEvent(existing, title, date, start, end) ?: return
+    fun saveEvent(
+        existing: CalendarEvent?,
+        title: String,
+        date: LocalDate,
+        start: LocalTime?,
+        end: LocalTime?,
+        endDate: LocalDate? = null,
+    ) {
+        val event = buildEvent(existing, title, date, start, end, endDate) ?: return
         viewModelScope.launch { eventDao.upsert(event) }
     }
 

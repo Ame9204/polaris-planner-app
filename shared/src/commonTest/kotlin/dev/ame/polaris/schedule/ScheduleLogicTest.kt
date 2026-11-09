@@ -102,12 +102,12 @@ class ScheduleLogicTest {
     }
 
     @Test
-    fun weeksStartOnMonday() {
+    fun weeksStartOnSunday() {
         val week = weekOf(kotlinx.datetime.LocalDate(2026, 11, 12)) // a Thursday
-        assertEquals(kotlinx.datetime.LocalDate(2026, 11, 9), week.first())
-        assertEquals(kotlinx.datetime.LocalDate(2026, 11, 15), week.last())
-        assertEquals("9 – 15 Nov", weekLabel(week))
-        assertEquals("30 Nov – 6 Dec", weekLabel(weekOf(kotlinx.datetime.LocalDate(2026, 12, 2))))
+        assertEquals(kotlinx.datetime.LocalDate(2026, 11, 8), week.first())
+        assertEquals(kotlinx.datetime.LocalDate(2026, 11, 14), week.last())
+        assertEquals("8 – 14 Nov", weekLabel(week))
+        assertEquals("29 Nov – 5 Dec", weekLabel(weekOf(kotlinx.datetime.LocalDate(2026, 12, 2))))
     }
 
     @Test

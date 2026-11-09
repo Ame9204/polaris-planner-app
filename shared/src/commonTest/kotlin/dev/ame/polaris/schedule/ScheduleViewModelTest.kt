@@ -102,7 +102,7 @@ class ScheduleViewModelTest {
         val vm = watchedViewModel()
         vm.setView(ScheduleView.Week)
         vm.next()
-        assertEquals(LocalDate(2026, 11, 16), vm.state.value.days.first().date) // next Monday
+        assertEquals(LocalDate(2026, 11, 15), vm.state.value.days.first().date) // next Sunday
     }
 
     @Test

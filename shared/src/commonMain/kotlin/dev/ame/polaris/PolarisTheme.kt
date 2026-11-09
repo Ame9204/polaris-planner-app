@@ -8,81 +8,122 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import org.jetbrains.compose.resources.Font
 import polaris.shared.generated.resources.Res
-import polaris.shared.generated.resources.special_elite
+import polaris.shared.generated.resources.montserrat
+import polaris.shared.generated.resources.space_mono_bold
+import polaris.shared.generated.resources.space_mono_regular
+import polaris.shared.generated.resources.unbounded
 
-private val Black = Color(0xFF000000)
-private val Navy = Color(0xFF14213D)
-private val Gold = Color(0xFFFCD512)
-private val LightGray = Color(0xFFE5E5E5)
-private val White = Color(0xFFFFFFFF)
+/**
+ * Retro-futuristic "spec sheet" style: a near-black page with flat, muted colour panels
+ * (bento grid), ink-dark text on the panels, wide heavy headings and tiny mono labels.
+ * No gradients or shine.
+ *
+ * The four panel colours live in [Panel] (ui/Gold.kt); this is the base dark scheme.
+ */
+object Palette {
+    val Background = Color(0xFF0E0E0E) // the page
+    val Card = Color(0xFF1A1A1A)       // dark cards, dialogs, nav
+    val Text = Color(0xFFF2EFE9)       // main text on dark: warm off-white
+    val Muted = Color(0xFF9C978F)      // secondary text on dark
+    val Ink = Color(0xFF141414)        // text and lines on the coloured panels
+    val Tangerine = Color(0xFFE9A25A)
+    val Terracotta = Color(0xFFC9553D)
+    val Sage = Color(0xFF8EA67A)
+    val Stone = Color(0xFFB8B3AB)      // warm grey
+}
 
-private val NightSky = darkColorScheme(
-    background = Black,          // 000000: app background
-    onBackground = White,        // text on the background
+private val SpecSheet = darkColorScheme(
+    background = Palette.Background,
+    onBackground = Palette.Text,
 
-    surface = Navy,              // 14213D: cards, sheets, nav bar
-    onSurface = White,
-    onSurfaceVariant = LightGray, // E5E5E5: secondary text (dates, hints)
-    surfaceVariant = Navy,
-    surfaceContainer = Navy,
-    surfaceContainerLow = Navy,
-    surfaceContainerHigh = Navy,
-    surfaceContainerHighest = Navy,
+    surface = Palette.Card,
+    onSurface = Palette.Text,
+    onSurfaceVariant = Palette.Muted,
+    surfaceVariant = Palette.Card,
+    surfaceContainer = Palette.Card,
+    surfaceContainerLow = Palette.Card,
+    surfaceContainerHigh = Palette.Card,
+    surfaceContainerHighest = Palette.Card,
 
-    primary = Gold,              // gold: buttons, highlights, selected tab
-    onPrimary = Black,           // text on gold buttons
-    secondary = Gold,
-    onSecondary = Black,
+    // The accent. Each page swaps this for its own panel colour (see PageTheme in App.kt).
+    primary = Palette.Tangerine,
+    onPrimary = Palette.Ink,
+    secondary = Palette.Tangerine,
+    onSecondary = Palette.Ink,
+    secondaryContainer = Palette.Tangerine,
+    onSecondaryContainer = Palette.Ink,
 
-    secondaryContainer = Gold,   // pill behind the selected tab
-    onSecondaryContainer = Black, // icon on that pill
+    error = Palette.Terracotta,
+    onError = Palette.Ink,
+    outline = Color(0x33F2EFE9),
 )
 
 /**
- * Special Elite, a typewriter font (Apache License 2.0, see licenses/ in the repo root).
- * It only comes in one weight, so every style uses it as-is.
+ * Three fonts (all SIL Open Font License, see licenses/ in the repo root):
+ * - Unbounded: wide and heavy, for titles and big numbers ("CALENDAR", "25").
+ * - Montserrat: plain and readable, for body text.
+ * - Space Mono: small technical labels ("DUE IN 2 DAYS", "#01").
  */
 @Composable
-private fun polarisFont() = FontFamily(
-    Font(Res.font.special_elite, FontWeight.Normal),
+private fun displayFont() = FontFamily(
+    Font(Res.font.unbounded, FontWeight.Medium),
+    Font(Res.font.unbounded, FontWeight.SemiBold),
+    Font(Res.font.unbounded, FontWeight.Bold),
+    Font(Res.font.unbounded, FontWeight.Black),
 )
 
-/**
- * Material's standard text sizes, in our font; body text a little roomier.
- * Every style is forced to the font's one real weight: asking for SemiBold or Bold would
- * make Compose fake a bold version by smearing the letters, which looks muddy on a
- * typewriter face. Headings stand out by size instead. (The weights listed below are
- * what a font with more weights would use, if you switch fonts later.)
- */
+@Composable
+private fun bodyFont() = FontFamily(
+    Font(Res.font.montserrat, FontWeight.Normal),
+    Font(Res.font.montserrat, FontWeight.Medium),
+    Font(Res.font.montserrat, FontWeight.SemiBold),
+    Font(Res.font.montserrat, FontWeight.Bold),
+)
+
+@Composable
+fun monoFont() = FontFamily(
+    Font(Res.font.space_mono_regular, FontWeight.Normal),
+    Font(Res.font.space_mono_bold, FontWeight.Bold),
+)
+
 @Composable
 private fun polarisTypography(): Typography {
-    val font = polarisFont()
+    val display = displayFont()
+    val body = bodyFont()
+    val mono = monoFont()
     val base = Typography()
-    @Suppress("UNUSED_PARAMETER")
-    fun TextStyle.f(weight: FontWeight? = null) = copy(fontFamily = font, fontWeight = FontWeight.Normal)
+    fun TextStyle.with(family: FontFamily, weight: FontWeight, size: Int? = null, spacing: Double? = null) = copy(
+        fontFamily = family,
+        fontWeight = weight,
+        fontSize = size?.sp ?: fontSize,
+        letterSpacing = spacing?.em ?: letterSpacing,
+    )
     return Typography(
-        displayLarge = base.displayLarge.f(),
-        displayMedium = base.displayMedium.f(),
-        displaySmall = base.displaySmall.f(),
-        headlineLarge = base.headlineLarge.f(FontWeight.SemiBold),
-        headlineMedium = base.headlineMedium.f(FontWeight.SemiBold),
-        headlineSmall = base.headlineSmall.f(FontWeight.SemiBold),
-        titleLarge = base.titleLarge.f(FontWeight.SemiBold),
-        titleMedium = base.titleMedium.f(FontWeight.SemiBold),
-        titleSmall = base.titleSmall.f(FontWeight.SemiBold),
-        bodyLarge = base.bodyLarge.f().copy(lineHeight = 26.sp),
-        bodyMedium = base.bodyMedium.f().copy(lineHeight = 22.sp),
-        bodySmall = base.bodySmall.f(),
-        labelLarge = base.labelLarge.f(FontWeight.SemiBold),
-        labelMedium = base.labelMedium.f(FontWeight.Medium),
-        labelSmall = base.labelSmall.f(FontWeight.Medium),
+        // Unbounded is very wide, so its sizes are a step smaller than Material's defaults.
+        displayLarge = base.displayLarge.with(display, FontWeight.Black, 52),
+        displayMedium = base.displayMedium.with(display, FontWeight.Black, 42),
+        displaySmall = base.displaySmall.with(display, FontWeight.Bold, 34),
+        headlineLarge = base.headlineLarge.with(display, FontWeight.Bold, 28),
+        headlineMedium = base.headlineMedium.with(display, FontWeight.Bold, 24),
+        headlineSmall = base.headlineSmall.with(display, FontWeight.Bold, 20),
+        titleLarge = base.titleLarge.with(display, FontWeight.SemiBold, 18),
+        titleMedium = base.titleMedium.with(display, FontWeight.SemiBold, 15),
+        titleSmall = base.titleSmall.with(display, FontWeight.Medium, 13),
+        bodyLarge = base.bodyLarge.with(body, FontWeight.Medium).copy(lineHeight = 24.sp),
+        bodyMedium = base.bodyMedium.with(body, FontWeight.Medium).copy(lineHeight = 21.sp),
+        bodySmall = base.bodySmall.with(body, FontWeight.Medium),
+        // Labels (buttons, chips, small captions) are mono, slightly spaced out
+        labelLarge = base.labelLarge.with(mono, FontWeight.Bold, 13, 0.04),
+        labelMedium = base.labelMedium.with(mono, FontWeight.Normal, 12, 0.04),
+        labelSmall = base.labelSmall.with(mono, FontWeight.Normal, 10, 0.06),
     )
 }
 
 @Composable
 fun PolarisTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = NightSky, typography = polarisTypography(), content = content)
+    MaterialTheme(colorScheme = SpecSheet, typography = polarisTypography(), content = content)
 }

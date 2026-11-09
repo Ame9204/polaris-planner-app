@@ -22,6 +22,13 @@ class FakeTaskDao : TaskDao {
                 .sortedWith(compareBy({ it.due }, { it.createdAt }))
         }
 
+    override fun observeNextDue(limit: Int): Flow<List<Task>> =
+        items.map { list ->
+            list.filter { !it.done && it.due != null }
+                .sortedWith(compareBy({ it.due }, { it.createdAt }))
+                .take(limit)
+        }
+
     override suspend fun upsert(task: Task) {
         items.update { list -> list.filterNot { it.id == task.id } + task }
     }

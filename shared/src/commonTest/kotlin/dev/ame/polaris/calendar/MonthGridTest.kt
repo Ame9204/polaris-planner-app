@@ -9,11 +9,11 @@ import kotlin.test.assertTrue
 class MonthGridTest {
 
     @Test
-    fun gridStartsOnTheMondayBeforeTheFirst() {
-        // 1 Nov 2026 is a Sunday, so the grid starts on Monday 26 Oct.
-        val days = monthGrid(LocalDate(2026, 11, 1))
-        assertEquals(LocalDate(2026, 10, 26), days.first())
-        assertEquals(DayOfWeek.MONDAY, days.first().dayOfWeek)
+    fun gridStartsOnTheSundayBeforeTheFirst() {
+        // 1 Dec 2026 is a Tuesday, so the grid starts on Sunday 29 Nov.
+        val days = monthGrid(LocalDate(2026, 12, 1))
+        assertEquals(LocalDate(2026, 11, 29), days.first())
+        assertEquals(DayOfWeek.SUNDAY, days.first().dayOfWeek)
     }
 
     @Test
@@ -24,13 +24,22 @@ class MonthGridTest {
     }
 
     @Test
-    fun monthStartingOnMondayHasNoLeadingDays() {
-        // 1 June 2026 is a Monday.
-        assertEquals(LocalDate(2026, 6, 1), monthGrid(LocalDate(2026, 6, 20)).first())
+    fun monthStartingOnSundayHasNoLeadingDays() {
+        // 1 Nov 2026 is a Sunday.
+        assertEquals(LocalDate(2026, 11, 1), monthGrid(LocalDate(2026, 11, 20)).first())
     }
 
     @Test
     fun titleIsReadable() {
         assertEquals("November 2026", monthTitle(LocalDate(2026, 11, 9)))
+    }
+}
+
+class RangeLabelTest {
+    @Test
+    fun labels() {
+        assertEquals("9 Nov", dev.ame.polaris.ui.rangeLabel(LocalDate(2026, 11, 9), LocalDate(2026, 11, 9)))
+        assertEquals("9 – 11 Nov", dev.ame.polaris.ui.rangeLabel(LocalDate(2026, 11, 9), LocalDate(2026, 11, 11)))
+        assertEquals("30 Nov – 2 Dec", dev.ame.polaris.ui.rangeLabel(LocalDate(2026, 11, 30), LocalDate(2026, 12, 2)))
     }
 }

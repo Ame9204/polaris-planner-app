@@ -64,6 +64,11 @@ import kotlinx.datetime.LocalTime
 import dev.ame.polaris.ui.Gold
 import dev.ame.polaris.ui.GoldButton
 import dev.ame.polaris.ui.PolarisCard
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 
 @Composable
 fun CalendarScreen(
@@ -78,6 +83,7 @@ fun CalendarScreen(
     val undo = LocalUndo.current
 
     BoxWithConstraints(modifier.fillMaxSize().padding(PagePadding)) {
+        val wide = maxWidth >= 720.dp
         val month: @Composable (Modifier) -> Unit = { m ->
             MonthView(
                 state = state,
@@ -85,6 +91,9 @@ fun CalendarScreen(
                 onNext = vm::nextMonth,
                 onToday = vm::goToToday,
                 onSelect = vm::select,
+                // Taller cells with more titles when there's room
+                cellHeight = if (wide) 100.dp else 64.dp,
+                maxChips = if (wide) 3 else 2,
                 modifier = m,
             )
         }
@@ -102,11 +111,11 @@ fun CalendarScreen(
             )
         }
 
-        if (maxWidth >= 720.dp) {
-            // Wide: month on the left, the selected day on the right
-            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(32.dp)) {
-                month(Modifier.widthIn(max = 480.dp).weight(1f))
-                day(Modifier.weight(1f))
+        if (wide) {
+            // Wide: the month fills the page, the selected day sits on the right
+            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                month(Modifier.weight(1f).verticalScroll(rememberScrollState()))
+                day(Modifier.width(320.dp))
             }
         } else {
             // Narrow: month on top, the selected day below
@@ -124,8 +133,8 @@ fun CalendarScreen(
             existing = existing,
             date = state.selected,
             onDismiss = { adding = false; editing = null },
-            onSave = { title, date, start, end ->
-                vm.saveEvent(existing, title, date, start, end)
+            onSave = { title, date, start, end, endDate ->
+                vm.saveEvent(existing, title, date, start, end, endDate)
                 adding = false
                 editing = null
             },
@@ -149,6 +158,8 @@ private fun MonthView(
     onNext: () -> Unit,
     onToday: () -> Unit,
     onSelect: (LocalDate) -> Unit,
+    cellHeight: Dp,
+    maxChips: Int,
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
@@ -180,10 +191,10 @@ private fun MonthView(
                         inMonth = date.month == state.month.month,
                         isToday = date == state.today,
                         isSelected = date == state.selected,
-                        hasEvents = state.events[date].orEmpty().isNotEmpty(),
-                        hasTasks = state.tasks[date].orEmpty().isNotEmpty(),
+                        chips = dayChips(state.events[date].orEmpty(), state.tasks[date].orEmpty()),
+                        maxChips = maxChips,
                         onClick = { onSelect(date) },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).height(cellHeight),
                     )
                 }
             }
@@ -191,53 +202,90 @@ private fun MonthView(
     }
 }
 
+/**
+ * One day in the month grid, Google Calendar style: the date at the top (today in a gold
+ * circle), then the day's events and tasks as small title chips, then "+N" if they don't fit.
+ */
 @Composable
 private fun DayCell(
     date: LocalDate,
     inMonth: Boolean,
     isToday: Boolean,
     isSelected: Boolean,
-    hasEvents: Boolean,
-    hasTasks: Boolean,
+    chips: List<DayChip>,
+    maxChips: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(10.dp)
-    Box(
+    val shape = RoundedCornerShape(8.dp)
+    Column(
         modifier
-            .aspectRatio(1f)
-            .padding(2.dp)
+            .padding(1.dp)
             .clip(shape)
-            .then(if (isSelected) Modifier.background(Gold.Shine) else Modifier)
-            .then(if (isToday && !isSelected) Modifier.border(1.dp, colors.primary, shape) else Modifier)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
+            .background(colors.surface.copy(alpha = if (isSelected) 0.75f else 0.22f))
+            .then(if (isSelected) Modifier.border(1.dp, Gold.Edge, shape) else Modifier)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 2.dp, vertical = 3.dp)
+            .alpha(if (inMonth) 1f else 0.4f), // days from the next/previous month fade back
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            Modifier
+                .align(Alignment.CenterHorizontally)
+                .size(22.dp)
+                .clip(CircleShape)
+                .then(if (isToday) Modifier.background(Gold.Shine) else Modifier),
+            contentAlignment = Alignment.Center,
+        ) {
             Text(
                 date.day.toString(),
+                style = MaterialTheme.typography.labelMedium,
                 fontWeight = if (isToday) FontWeight.Bold else null,
-                color = when {
-                    isSelected -> colors.onPrimary
-                    !inMonth -> colors.onSurfaceVariant.copy(alpha = 0.35f)
-                    isToday -> colors.primary
-                    else -> colors.onBackground
-                },
+                color = if (isToday) colors.onPrimary else colors.onBackground,
             )
-            // Gold dot = event(s), grey dot = task(s) due
-            Row(Modifier.height(6.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                if (hasEvents) Dot(if (isSelected) colors.onPrimary else colors.primary)
-                if (hasTasks) Dot(if (isSelected) colors.onPrimary else colors.onSurfaceVariant)
-            }
+        }
+        // If everything doesn't fit, keep one slot for "+N"
+        val shown = if (chips.size > maxChips) chips.take(maxChips - 1) else chips
+        shown.forEach { DayChipLabel(it) }
+        if (chips.size > shown.size) {
+            Text(
+                "+${chips.size - shown.size}",
+                modifier = Modifier.padding(start = 3.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.onSurfaceVariant,
+            )
         }
     }
 }
 
+/** What a cell shows for one event or task. */
+private data class DayChip(val title: String, val isEvent: Boolean, val done: Boolean = false)
+
+/** All-day events first, then timed events by start time, then tasks due that day. */
+private fun dayChips(events: List<CalendarEvent>, tasks: List<Task>): List<DayChip> =
+    events.sortedWith(compareBy(nullsFirst()) { it.start }).map { DayChip(it.title, isEvent = true) } +
+        tasks.map { DayChip(it.title, isEvent = false, done = it.done) }
+
+/** Events: a gold-tinted chip. Tasks: a grey one, crossed out when done. */
 @Composable
-private fun Dot(color: Color) {
-    Box(Modifier.size(5.dp).clip(CircleShape).background(color))
+private fun DayChipLabel(chip: DayChip) {
+    val colors = MaterialTheme.colorScheme
+    Text(
+        chip.title,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(4.dp))
+            .background(if (chip.isEvent) colors.primary.copy(alpha = 0.30f) else colors.onSurfaceVariant.copy(alpha = 0.16f))
+            .padding(horizontal = 3.dp, vertical = 1.dp),
+        style = MaterialTheme.typography.labelSmall,
+        color = if (chip.done) colors.onSurfaceVariant else colors.onSurface,
+        textDecoration = if (chip.done) TextDecoration.LineThrough else null,
+        maxLines = 1,
+        overflow = TextOverflow.Clip,
+    )
 }
+
 
 // ---------- Selected day ----------
 
@@ -293,7 +341,7 @@ private fun EventRow(event: CalendarEvent, onClick: () -> Unit, onDelete: () -> 
         Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 timeLabel(event),
-                modifier = Modifier.width(96.dp),
+                modifier = Modifier.width(if (event.isMultiDay) 132.dp else 96.dp),
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.primary,
             )
@@ -335,6 +383,12 @@ private fun DueTaskRow(task: Task, onToggle: () -> Unit, modifier: Modifier = Mo
 }
 
 private fun timeLabel(event: CalendarEvent): String {
+    if (event.isMultiDay) {
+        // "9–11 Nov", or with times "9 Nov 14:00 → 11 Nov 10:00"
+        val from = shortDate(event.date) + (event.start?.let { " ${hhmm(it)}" } ?: "")
+        val to = shortDate(event.lastDate) + (event.end?.let { " ${hhmm(it)}" } ?: "")
+        return "$from → $to"
+    }
     val start = event.start ?: return "All day"
     val end = event.end ?: return hhmm(start)
     return "${hhmm(start)}–${hhmm(end)}"

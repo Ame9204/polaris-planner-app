@@ -15,21 +15,21 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
-import kotlinx.datetime.plus
 
 /** Today's slice of every other page. */
 data class OverviewUiState(
     val today: LocalDate,
     val blocks: List<ScheduleBlock> = emptyList(),   // today's schedule, by start time
-    val events: List<CalendarEvent> = emptyList(),   // today + the next few days
-    val tasks: List<Task> = emptyList(),             // unfinished: overdue + due soon
+    val events: List<CalendarEvent> = emptyList(),   // the next few events, however far ahead
+    val tasks: List<Task> = emptyList(),             // the most urgent unfinished tasks
+    val todayEvents: List<CalendarEvent> = emptyList(), // everything on today (for the count)
+    val dueTasks: List<Task> = emptyList(),          // all tasks due today or overdue (for the count)
 )
 
 /**
  * Overview has no table of its own: it only reads the other pages' data.
- * combine() watches all three queries and rebuilds the state when any of them changes,
+ * combine() watches all its queries and rebuilds the state when any of them changes,
  * so ticking a task on the Tasks page updates this page too.
  */
 class OverviewViewModel(
@@ -39,14 +39,15 @@ class OverviewViewModel(
     today: LocalDate = today(),
 ) : ViewModel() {
 
-    private val lastUpcomingDay = today.plus(UpcomingDays - 1, DateTimeUnit.DAY)
-
     val state: StateFlow<OverviewUiState> = combine(
         scheduleDao.observeForDay(today, today.dayOfWeek.bit()),
-        eventDao.observeBetween(today, lastUpcomingDay),
-        taskDao.observeOpenDueUntil(lastUpcomingDay),
-    ) { blocks, events, tasks ->
-        OverviewUiState(today, blocks, events, tasks)
+        // A few extra, because today's already-finished events are hidden from the card
+        eventDao.observeUpcoming(today, GlanceCount + 5),
+        taskDao.observeNextDue(GlanceCount),
+        eventDao.observeBetween(today, today),
+        taskDao.observeOpenDueUntil(today),
+    ) { blocks, events, tasks, todayEvents, dueTasks ->
+        OverviewUiState(today, blocks, events, tasks, todayEvents, dueTasks)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), OverviewUiState(today))
 
     fun completeTask(id: String) {

@@ -17,6 +17,20 @@ data class CalendarEvent(
     val start: LocalTime? = null,
     val end: LocalTime? = null,
     val createdAt: Long,
+    /**
+     * The last day, for events spanning several days (like Google Calendar's "ends on").
+     * Null means it ends on the same day it starts. A timed multi-day event starts at
+     * [start] on [date] and ends at [end] on this day.
+     */
+    val endDate: LocalDate? = null,
 ) {
     val isAllDay: Boolean get() = start == null
+
+    /** The day it ends (the same as [date] for one-day events). */
+    val lastDate: LocalDate get() = endDate ?: date
+
+    val isMultiDay: Boolean get() = lastDate > date
+
+    /** Does this event cover [day]? */
+    fun occursOn(day: LocalDate): Boolean = day >= date && day <= lastDate
 }

@@ -17,7 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import dev.ame.polaris.schedule.oneHourLater
-import dev.ame.polaris.ui.DateButton
+import dev.ame.polaris.ui.DateRangeButton
 import dev.ame.polaris.ui.TimeButton
 import dev.ame.polaris.util.newId
 import dev.ame.polaris.util.nowMillis
@@ -35,11 +35,19 @@ fun buildEvent(
     date: LocalDate,
     start: LocalTime?,
     end: LocalTime?,
+    endDate: LocalDate? = null,
 ): CalendarEvent? {
     val clean = title.trim()
     if (clean.isEmpty()) return null
-    // No end without a start, and an end before the start is dropped.
-    val fixedEnd = if (start == null || (end != null && end < start)) null else end
+    // An end date before the start date can't happen; the same day is stored as "no end date".
+    val lastDay = endDate?.takeIf { it > date }
+    // No end time without a start. On a one-day event an end before the start is dropped;
+    // on a multi-day event it's fine (it ends on a later day).
+    val fixedEnd = when {
+        start == null -> null
+        lastDay == null && end != null && end < start -> null
+        else -> end
+    }
     return CalendarEvent(
         id = existing?.id ?: newId(),
         title = clean,
@@ -47,6 +55,7 @@ fun buildEvent(
         start = start,
         end = fixedEnd,
         createdAt = existing?.createdAt ?: nowMillis(),
+        endDate = lastDay,
     )
 }
 
@@ -60,12 +69,13 @@ fun EventDialog(
     existing: CalendarEvent?,
     date: LocalDate,
     onDismiss: () -> Unit,
-    onSave: (title: String, date: LocalDate, start: LocalTime?, end: LocalTime?) -> Unit,
+    onSave: (title: String, date: LocalDate, start: LocalTime?, end: LocalTime?, endDate: LocalDate) -> Unit,
     onDelete: (() -> Unit)? = null,
     initialStart: LocalTime? = null,
 ) {
     var title by remember { mutableStateOf(existing?.title ?: "") }
     var day by remember { mutableStateOf(existing?.date ?: date) }
+    var lastDay by remember { mutableStateOf(existing?.lastDate ?: date) }
     var allDay by remember { mutableStateOf(if (existing != null) existing.isAllDay else initialStart == null) }
     var start by remember { mutableStateOf(existing?.start ?: initialStart ?: LocalTime(9, 0)) }
     var end by remember { mutableStateOf(existing?.end ?: start.oneHourLater()) }
@@ -81,27 +91,38 @@ fun EventDialog(
                     placeholder = { Text("Title") },
                     singleLine = true,
                 )
-                DateButton("Date", day, onPick = { day = it })
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = allDay, onCheckedChange = { allDay = it })
                     Text("All day")
                 }
+                // One calendar for the dates: tap one day, or a first and a last day
+                Text("DATES", style = MaterialTheme.typography.labelMedium)
+                DateRangeButton(day, lastDay, onPick = { from, to ->
+                    day = from
+                    lastDay = to
+                })
                 if (!allDay) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TimeButton("Start", start, onPick = {
+                    // Start time is on the first day, end time on the last day
+                    Text("TIME", style = MaterialTheme.typography.labelMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        TimeButton("", start, onPick = {
                             start = it
-                            // Keep the end after the start.
-                            if (end <= it) end = it.oneHourLater()
+                            // Keep a same-day event's end after its start.
+                            if (lastDay == day && end <= it) end = it.oneHourLater()
                         })
-                        TimeButton("End", end, onPick = { end = it })
+                        Text("→")
+                        TimeButton("", end, onPick = { end = it })
                     }
+                }
+                if (!allDay && lastDay == day && end <= start) {
+                    Text("Ends before it starts.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { onSave(title, day, start.takeUnless { allDay }, end.takeUnless { allDay }) },
-                enabled = title.isNotBlank(),
+                onClick = { onSave(title, day, start.takeUnless { allDay }, end.takeUnless { allDay }, lastDay) },
+                enabled = title.isNotBlank() && (allDay || lastDay > day || end > start),
             ) { Text("Save") }
         },
         dismissButton = {

@@ -35,6 +35,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import dev.ame.polaris.calendar.CalendarScreen
@@ -46,7 +47,6 @@ import dev.ame.polaris.tasks.TasksScreen
 import dev.ame.polaris.ui.LocalUndo
 import dev.ame.polaris.ui.PolarisSnackbarHost
 import dev.ame.polaris.ui.UndoController
-import dev.ame.polaris.ui.goldShine
 
 /** The whole app. Each platform opens the database and passes it in. */
 @Composable
@@ -77,7 +77,7 @@ fun App(database: PolarisDatabase) {
                                         label = { Text(page.label) },
                                         colors = NavigationRailItemDefaults.colors(
                                             indicatorColor = Color.Transparent, // we draw our own shiny one
-                                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                                            selectedTextColor = page.color,
                                         ),
                                     )
                                 }
@@ -101,7 +101,7 @@ fun App(database: PolarisDatabase) {
                                         label = { Text(page.label) },
                                         colors = NavigationBarItemDefaults.colors(
                                             indicatorColor = Color.Transparent, // we draw our own shiny one
-                                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                                            selectedTextColor = page.color,
                                         ),
                                     )
                                 }
@@ -116,15 +116,15 @@ fun App(database: PolarisDatabase) {
     }
 }
 
-/** A tab's icon; the selected one sits on a shiny gold pill. */
+/** A tab's icon; the selected one sits on a pill in that page's own colour. */
 @Composable
 private fun NavIcon(page: Page, selected: Boolean) {
     if (selected) {
         Box(
-            Modifier.size(width = 56.dp, height = 32.dp).goldShine(RoundedCornerShape(16.dp)),
+            Modifier.size(width = 56.dp, height = 32.dp).clip(RoundedCornerShape(16.dp)).background(page.color),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(page.icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
+            Icon(page.icon, contentDescription = null, tint = Palette.Ink)
         }
     } else {
         Icon(page.icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -145,16 +145,35 @@ private fun PageContent(
         transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(120)) },
         label = "page",
     ) { shown ->
-        // No `else`: Kotlin forces every Page to be handled.
-        when (shown) {
-            Page.Overview -> OverviewScreen(
-                database.eventDao(), database.taskDao(), database.scheduleDao(), database.settingDao(),
-                onOpen = onOpen,
-            )
-            Page.Calendar -> CalendarScreen(database.eventDao(), database.taskDao())
-            Page.Tasks -> TasksScreen(database.taskDao())
-            Page.Schedule -> ScheduleScreen(database.scheduleDao(), database.eventDao())
-            Page.Notes -> NotesScreen(database.noteDao())
+        PageTheme(shown) {
+            // No `else`: Kotlin forces every Page to be handled.
+            when (shown) {
+                Page.Overview -> OverviewScreen(
+                    database.eventDao(), database.taskDao(), database.scheduleDao(), database.settingDao(),
+                    onOpen = onOpen,
+                )
+                Page.Calendar -> CalendarScreen(database.eventDao(), database.taskDao())
+                Page.Tasks -> TasksScreen(database.taskDao())
+                Page.Schedule -> ScheduleScreen(database.scheduleDao(), database.eventDao())
+                Page.Notes -> NotesScreen(database.noteDao())
+            }
         }
+    }
+}
+
+/**
+ * Gives a page its own accent: buttons, checkboxes, highlights and "today" all take the
+ * page's colour (sage on Tasks, terracotta on Calendar…). Also tells shared pieces which
+ * page they're on (LocalPage), e.g. for the "02" in the header.
+ */
+@Composable
+private fun PageTheme(page: Page, content: @Composable () -> Unit) {
+    val scheme = MaterialTheme.colorScheme.copy(
+        primary = page.color,
+        secondary = page.color,
+        secondaryContainer = page.color,
+    )
+    MaterialTheme(colorScheme = scheme, typography = MaterialTheme.typography) {
+        CompositionLocalProvider(LocalPage provides page, content = content)
     }
 }

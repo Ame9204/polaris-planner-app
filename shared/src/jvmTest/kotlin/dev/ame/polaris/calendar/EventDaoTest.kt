@@ -47,4 +47,17 @@ class EventDaoTest {
 
         assertEquals(listOf("Due"), found.map { it.title })
     }
+
+    @Test
+    fun multiDayEventsShowUpOnEveryDayTheyCover() = runTest {
+        val dao = db.eventDao()
+        dao.upsert(CalendarEvent("t", "Trip", LocalDate(2026, 11, 7), createdAt = 1, endDate = LocalDate(2026, 11, 10)))
+
+        // Started before the range, still running inside it
+        assertEquals(listOf("Trip"), dao.observeBetween(LocalDate(2026, 11, 9), LocalDate(2026, 11, 9)).first().map { it.title })
+        // Over before the range
+        assertEquals(emptyList(), dao.observeBetween(LocalDate(2026, 11, 11), LocalDate(2026, 11, 20)).first())
+        // The end date survives the round trip
+        assertEquals(LocalDate(2026, 11, 10), dao.observeBetween(LocalDate(2026, 11, 1), LocalDate(2026, 11, 30)).first().single().endDate)
+    }
 }

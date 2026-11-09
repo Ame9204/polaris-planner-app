@@ -11,7 +11,14 @@ class FakeEventDao : EventDao {
     val items = MutableStateFlow<List<CalendarEvent>>(emptyList())
 
     override fun observeBetween(from: LocalDate, to: LocalDate): Flow<List<CalendarEvent>> =
-        items.map { list -> list.filter { it.date in from..to } }
+        items.map { list -> list.filter { it.date <= to && it.lastDate >= from } }
+
+    override fun observeUpcoming(from: LocalDate, limit: Int): Flow<List<CalendarEvent>> =
+        items.map { list ->
+            list.filter { it.lastDate >= from }
+                .sortedWith(compareBy<CalendarEvent>({ it.date }, { it.start }, { it.createdAt }))
+                .take(limit)
+        }
 
     override suspend fun upsert(event: CalendarEvent) {
         items.update { list -> list.filterNot { it.id == event.id } + event }

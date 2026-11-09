@@ -35,7 +35,7 @@ fun DateButton(
     var open by remember { mutableStateOf(false) }
 
     OutlinedButton(onClick = { open = true }, modifier = modifier) {
-        Text("$label ${shortDate(date)}")
+        Text(if (label.isBlank()) shortDate(date) else "$label ${shortDate(date)}")
     }
 
     if (open) {
