@@ -3,6 +3,8 @@ package dev.ame.polaris
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -55,24 +57,34 @@ fun main() {
     }
 }
 
-/** A tangerine four-pointed star, drawn in code so no image file is needed. */
+/**
+ * The app icon (window + tray): a gold four-pointed star on a dark circle.
+ * Drawn in code from the same design as design/icon/ (see make_icons.py there).
+ */
 private object StarIcon : Painter() {
     override val intrinsicSize = Size(256f, 256f)
 
     override fun DrawScope.onDraw() {
-        val w = size.width
-        val h = size.height
+        val d = size.minDimension
+        val c = d / 2
+        val tip = d * 27f / 66f // the star fills ~80% of the circle, like the design
+        drawCircle(Color(0xFF1E1E1E), radius = c, center = Offset(c, c))
+        // Four points joined by curves that pull in to the centre
         val star = Path().apply {
-            moveTo(w * 0.5f, 0f)
-            lineTo(w * 0.59f, h * 0.41f)
-            lineTo(w, h * 0.5f)
-            lineTo(w * 0.59f, h * 0.59f)
-            lineTo(w * 0.5f, h)
-            lineTo(w * 0.41f, h * 0.59f)
-            lineTo(0f, h * 0.5f)
-            lineTo(w * 0.41f, h * 0.41f)
+            moveTo(c, c - tip)
+            quadraticTo(c, c, c + tip, c)
+            quadraticTo(c, c, c, c + tip)
+            quadraticTo(c, c, c - tip, c)
+            quadraticTo(c, c, c, c - tip)
             close()
         }
-        drawPath(star, Color(0xFFE9A25A)) // tangerine
+        drawPath(
+            star,
+            Brush.linearGradient(
+                listOf(Color(0xFFEDBD37), Color(0xFFC9881F)), // light top-left -> deeper bottom-right
+                start = Offset(c - tip, c - tip),
+                end = Offset(c + tip, c + tip),
+            ),
+        )
     }
 }
