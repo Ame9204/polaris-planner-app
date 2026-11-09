@@ -16,6 +16,12 @@ class FakeScheduleDao : ScheduleDao {
                 .sortedWith(compareBy({ it.start }, { it.createdAt }))
         }
 
+    override fun observeForRange(from: LocalDate, to: LocalDate): Flow<List<ScheduleBlock>> =
+        items.map { list ->
+            list.filter { it.days != 0 || (it.date != null && it.date in from..to) }
+                .sortedWith(compareBy({ it.start }, { it.createdAt }))
+        }
+
     override suspend fun upsert(block: ScheduleBlock) {
         items.update { list -> list.filterNot { it.id == block.id } + block }
     }

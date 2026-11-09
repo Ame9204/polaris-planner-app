@@ -34,5 +34,11 @@ class ScheduleDaoTest {
         val found = dao.observeForDay(monday, DayOfWeek.MONDAY.bit()).first()
 
         assertEquals(listOf("Dentist", "Work"), found.map { it.title }) // sorted by start time
+
+        // The week query: every repeating block, plus one-offs inside the range only
+        val week = dao.observeForRange(monday, LocalDate(2026, 11, 15)).first()
+        assertEquals(listOf("Dentist", "Other day", "Work", "Brunch"), week.map { it.title })
+        val nextWeek = dao.observeForRange(LocalDate(2026, 11, 16), LocalDate(2026, 11, 22)).first()
+        assertEquals(listOf("Work", "Brunch"), nextWeek.map { it.title })
     }
 }

@@ -1,9 +1,14 @@
 package dev.ame.polaris.schedule
 
+import dev.ame.polaris.util.shortDate
 import dev.ame.polaris.util.titleCase
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.isoDayNumber
+import kotlinx.datetime.minus
+import kotlinx.datetime.plus
 
 // Pure logic for the Schedule page: no UI, no database, easy to test.
 
@@ -85,6 +90,96 @@ fun timeline(blocks: List<ScheduleBlock>, minFreeMinutes: Int = 15): List<Timeli
         busyUntil = if (gapStart == null || block.end > gapStart) block.end else gapStart
     }
     return items
+}
+
+// ---------- Weeks ----------
+
+/** Does this block happen on [day]? (A one-off on that date, or repeating on that weekday.) */
+fun ScheduleBlock.happensOn(day: LocalDate): Boolean =
+    date == day || (days and day.dayOfWeek.bit()) != 0
+
+/** The Monday-to-Sunday week that contains [date]. */
+fun weekOf(date: LocalDate): List<LocalDate> {
+    val monday = date.minus(date.dayOfWeek.isoDayNumber - 1, DateTimeUnit.DAY)
+    return List(7) { monday.plus(it, DateTimeUnit.DAY) }
+}
+
+/** "9 – 15 Nov", or "30 Nov – 6 Dec" when the week crosses months. */
+fun weekLabel(week: List<LocalDate>): String {
+    val first = week.first()
+    val last = week.last()
+    return if (first.month == last.month) {
+        "${first.day} – ${shortDate(last)}"
+    } else {
+        "${shortDate(first)} – ${shortDate(last)}"
+    }
+}
+
+// ---------- Drawing the day as a timeline ----------
+
+/**
+ * A block plus where it goes on the timeline. Overlapping blocks share the width:
+ * [laneCount] columns side by side, and this block sits in column [lane] (0 = left).
+ */
+data class PlacedBlock(val block: ScheduleBlock, val lane: Int, val laneCount: Int)
+
+/**
+ * Splits overlapping blocks into side-by-side lanes, like a calendar app's day view.
+ * Blocks that don't overlap anything get the full width. Each block takes the leftmost
+ * lane that's free when it starts; every block in an overlapping group gets the same
+ * lane count, so their widths line up.
+ */
+fun layoutLanes(blocks: List<ScheduleBlock>): List<PlacedBlock> {
+    val sorted = blocks.sortedWith(compareBy({ it.start }, { it.createdAt }))
+    val result = mutableListOf<PlacedBlock>()
+
+    val group = mutableListOf<Pair<ScheduleBlock, Int>>() // blocks overlapping each other, with their lane
+    val laneEnds = mutableListOf<LocalTime>()               // when each lane in the group frees up
+    var groupEnd: LocalTime? = null
+
+    fun closeGroup() {
+        group.forEach { (block, lane) -> result += PlacedBlock(block, lane, laneEnds.size) }
+        group.clear()
+        laneEnds.clear()
+    }
+
+    for (block in sorted) {
+        val end = groupEnd
+        if (end != null && block.start >= end) {
+            closeGroup() // nothing still running: start a new group
+            groupEnd = null
+        }
+        var lane = laneEnds.indexOfFirst { it <= block.start }
+        if (lane == -1) {
+            laneEnds += block.end
+            lane = laneEnds.lastIndex
+        } else {
+            laneEnds[lane] = block.end
+        }
+        group += block to lane
+        val current = groupEnd
+        groupEnd = if (current == null || block.end > current) block.end else current
+    }
+    closeGroup()
+    return result
+}
+
+/** "12 AM", "1 AM" … "12 PM", "1 PM" … "11 PM" */
+fun hourLabel(hour: Int): String {
+    val h12 = if (hour % 12 == 0) 12 else hour % 12
+    return "$h12 ${if (hour < 12) "AM" else "PM"}"
+}
+
+fun minuteOfDay(time: LocalTime): Int = time.toSecondOfDay() / 60
+
+/**
+ * The time at [offsetPx] down the timeline (where [hourPx] is one hour's height),
+ * rounded down to [snapMinutes]. Used when you tap an empty spot to add a block.
+ */
+fun timeAtOffset(offsetPx: Float, hourPx: Float, snapMinutes: Int = 30): LocalTime {
+    val minutes = (offsetPx / hourPx * 60).toInt()
+    val snapped = (minutes / snapMinutes * snapMinutes).coerceIn(0, 24 * 60 - snapMinutes)
+    return LocalTime(snapped / 60, snapped % 60)
 }
 
 /** Is [now] inside this block? (Start included, end excluded.) */
