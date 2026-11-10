@@ -17,3 +17,11 @@ captures
 !*.xcworkspace/contents.xcworkspacedata
 **/xcshareddata/WorkspaceSettings.xcsettings
 node_modules/
+
+# Release signing: never commit the key or its passwords
+keystore.properties
+*.jks
+*.keystore
+
+# Built release files (too big for Git; attach them to a GitHub Release instead)
+release/
