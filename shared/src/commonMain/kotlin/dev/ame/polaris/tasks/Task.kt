@@ -1,5 +1,6 @@
 package dev.ame.polaris.tasks
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import kotlinx.datetime.LocalDate
@@ -24,4 +25,11 @@ data class Task(
      * reminder on the due date. Works for tasks without a due date too.
      */
     val remindAt: LocalDateTime? = null,
+    // ---- Sync bookkeeping (the app's screens never show these) ----
+    /** When this row last changed, on any device (ms since 1970). The newest change wins. */
+    @ColumnInfo(defaultValue = "0")
+    val changedAt: Long = 0,
+    /** Deleted rows stay as a marker, so the deletion can reach your other devices. */
+    @ColumnInfo(defaultValue = "0")
+    val deleted: Boolean = false,
 )

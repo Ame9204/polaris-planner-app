@@ -31,6 +31,13 @@ data class ScheduleBlock(
      */
     @ColumnInfo(defaultValue = "0")
     val remindMinutesBefore: Int? = 0,
+    // ---- Sync bookkeeping (the app's screens never show these) ----
+    /** When this row last changed, on any device (ms since 1970). The newest change wins. */
+    @ColumnInfo(defaultValue = "0")
+    val changedAt: Long = 0,
+    /** Deleted rows stay as a marker, so the deletion can reach your other devices. */
+    @ColumnInfo(defaultValue = "0")
+    val deleted: Boolean = false,
 ) {
     val repeats: Boolean get() = days != 0
 }

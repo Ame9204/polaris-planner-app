@@ -36,10 +36,11 @@ import kotlinx.datetime.LocalTime
  *  5: + settings (key/value: weather location, units, cached weather)
  *  6: + tasks.remindAt, schedule_blocks.remindMinutesBefore (per-item reminders)
  *  7: + events.endDate (multi-day events)
+ *  8: + changedAt, deleted on tasks/events/schedule_blocks/notes (getting ready for sync)
  */
 @Database(
     entities = [Task::class, CalendarEvent::class, ScheduleBlock::class, Note::class, Setting::class],
-    version = 7,
+    version = 8,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -47,6 +48,7 @@ import kotlinx.datetime.LocalTime
         AutoMigration(from = 4, to = 5),
         AutoMigration(from = 5, to = 6),
         AutoMigration(from = 6, to = 7),
+        AutoMigration(from = 7, to = 8),
     ],
 )
 @TypeConverters(Converters::class)

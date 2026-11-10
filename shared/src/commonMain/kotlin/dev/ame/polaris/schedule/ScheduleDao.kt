@@ -3,6 +3,7 @@ package dev.ame.polaris.schedule
 import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Upsert
+import dev.ame.polaris.util.nowMillis
 import kotlinx.coroutines.flow.Flow
 import kotlinx.datetime.LocalDate
 
@@ -16,7 +17,7 @@ interface ScheduleDao {
     @Query(
         """
         SELECT * FROM schedule_blocks
-        WHERE date = :date OR (days & :dayBit) != 0
+        WHERE deleted = 0 AND (date = :date OR (days & :dayBit) != 0)
         ORDER BY start, createdAt
         """
     )
@@ -29,15 +30,33 @@ interface ScheduleDao {
     @Query(
         """
         SELECT * FROM schedule_blocks
-        WHERE days != 0 OR date BETWEEN :from AND :to
+        WHERE deleted = 0 AND (days != 0 OR date BETWEEN :from AND :to)
         ORDER BY start, createdAt
         """
     )
     fun observeForRange(from: LocalDate, to: LocalDate): Flow<List<ScheduleBlock>>
 
-    @Upsert
-    suspend fun upsert(block: ScheduleBlock)
 
-    @Query("DELETE FROM schedule_blocks WHERE id = :id")
-    suspend fun delete(id: String)
+    // Writes go through the plain-named functions (upsert, delete, toggle…), which stamp
+    // `changedAt` with the current time so sync knows what changed. The "…At"/"Raw" ones are
+    // what Room actually runs; the sync engine uses upsertRaw to store rows from the cloud
+    // exactly as they are.
+
+    suspend fun upsert(block: ScheduleBlock) = upsertRaw(block.copy(changedAt = nowMillis(), deleted = false))
+
+    @Upsert
+    suspend fun upsertRaw(block: ScheduleBlock)
+
+    suspend fun delete(id: String) = markDeleted(id, nowMillis())
+
+    @Query("UPDATE schedule_blocks SET deleted = 1, changedAt = :now WHERE id = :id")
+    suspend fun markDeleted(id: String, now: Long)
+
+    /** Sync: every row changed after [since], deleted ones included. */
+    @Query("SELECT * FROM schedule_blocks WHERE changedAt > :since")
+    suspend fun changedSince(since: Long): List<ScheduleBlock>
+
+    /** Sync: one row by id, deleted or not (to compare with what the cloud sent). */
+    @Query("SELECT * FROM schedule_blocks WHERE id = :id")
+    suspend fun findById(id: String): ScheduleBlock?
 }

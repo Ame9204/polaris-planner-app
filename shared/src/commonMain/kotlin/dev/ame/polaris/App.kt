@@ -43,14 +43,19 @@ import dev.ame.polaris.data.PolarisDatabase
 import dev.ame.polaris.notes.NotesScreen
 import dev.ame.polaris.overview.OverviewScreen
 import dev.ame.polaris.schedule.ScheduleScreen
+import dev.ame.polaris.sync.LocalSync
+import dev.ame.polaris.sync.SyncManager
 import dev.ame.polaris.tasks.TasksScreen
 import dev.ame.polaris.ui.LocalUndo
 import dev.ame.polaris.ui.PolarisSnackbarHost
 import dev.ame.polaris.ui.UndoController
 
-/** The whole app. Each platform opens the database and passes it in. */
+/**
+ * The whole app. Each platform opens the database and passes it in, plus its cloud
+ * sync (null = no sync, e.g. in previews).
+ */
 @Composable
-fun App(database: PolarisDatabase) {
+fun App(database: PolarisDatabase, sync: SyncManager? = null) {
     PolarisTheme {
         // Which tab is showing. Changing it redraws the parts of the UI that read it.
         var current by rememberSaveable { mutableStateOf(Page.Overview) }
@@ -60,7 +65,7 @@ fun App(database: PolarisDatabase) {
         val scope = rememberCoroutineScope()
         val undo = remember { UndoController(snackbar, scope) }
 
-        CompositionLocalProvider(LocalUndo provides undo) {
+        CompositionLocalProvider(LocalUndo provides undo, LocalSync provides sync) {
             BoxWithConstraints(
                 Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
             ) {

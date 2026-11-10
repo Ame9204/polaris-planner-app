@@ -18,6 +18,10 @@ import dev.ame.polaris.data.createDatabase
 import dev.ame.polaris.reminders.Reminder
 import dev.ame.polaris.reminders.ReminderEngine
 import dev.ame.polaris.reminders.ReminderPlatform
+import dev.ame.polaris.sync.SyncManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlin.time.Instant
 
@@ -25,6 +29,8 @@ fun main() {
     // Open the database once, before any window exists.
     val database = createDatabase()
     val reminders = ReminderEngine(database)
+    // Cloud sync, running in the background while the app is open
+    val sync = SyncManager(database, CoroutineScope(SupervisorJob() + Dispatchers.Default)).apply { start() }
 
     application {
         // An icon in the system tray (bottom right on Windows). Reminders pop up from it.
@@ -52,7 +58,7 @@ fun main() {
             title = "Polaris",
             icon = StarIcon,
         ) {
-            App(database)
+            App(database, sync)
         }
     }
 }

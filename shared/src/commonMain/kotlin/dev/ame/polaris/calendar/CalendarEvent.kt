@@ -1,5 +1,6 @@
 package dev.ame.polaris.calendar
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import kotlinx.datetime.LocalDate
@@ -23,6 +24,13 @@ data class CalendarEvent(
      * [start] on [date] and ends at [end] on this day.
      */
     val endDate: LocalDate? = null,
+    // ---- Sync bookkeeping (the app's screens never show these) ----
+    /** When this row last changed, on any device (ms since 1970). The newest change wins. */
+    @ColumnInfo(defaultValue = "0")
+    val changedAt: Long = 0,
+    /** Deleted rows stay as a marker, so the deletion can reach your other devices. */
+    @ColumnInfo(defaultValue = "0")
+    val deleted: Boolean = false,
 ) {
     val isAllDay: Boolean get() = start == null
 

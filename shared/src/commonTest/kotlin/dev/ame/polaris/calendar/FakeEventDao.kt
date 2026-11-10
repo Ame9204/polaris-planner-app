@@ -20,11 +20,15 @@ class FakeEventDao : EventDao {
                 .take(limit)
         }
 
-    override suspend fun upsert(event: CalendarEvent) {
+    override suspend fun upsertRaw(event: CalendarEvent) {
         items.update { list -> list.filterNot { it.id == event.id } + event }
     }
 
-    override suspend fun delete(id: String) {
+    override suspend fun markDeleted(id: String, now: Long) {
         items.update { list -> list.filterNot { it.id == id } }
     }
+
+    override suspend fun changedSince(since: Long): List<CalendarEvent> = items.value.filter { it.changedAt > since }
+
+    override suspend fun findById(id: String): CalendarEvent? = items.value.firstOrNull { it.id == id }
 }

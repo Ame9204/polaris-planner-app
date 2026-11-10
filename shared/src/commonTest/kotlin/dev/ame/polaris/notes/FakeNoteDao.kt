@@ -15,7 +15,7 @@ class FakeNoteDao : NoteDao {
                 .sortedWith(compareByDescending<Note> { it.pinned }.thenByDescending { it.updatedAt })
         }
 
-    override suspend fun upsert(note: Note) {
+    override suspend fun upsertRaw(note: Note) {
         items.update { list -> list.filterNot { it.id == note.id } + note }
     }
 
@@ -25,11 +25,15 @@ class FakeNoteDao : NoteDao {
         }
     }
 
-    override suspend fun togglePinned(id: String) {
+    override suspend fun togglePinnedAt(id: String, now: Long) {
         items.update { list -> list.map { if (it.id == id) it.copy(pinned = !it.pinned) else it } }
     }
 
-    override suspend fun delete(id: String) {
+    override suspend fun markDeleted(id: String, now: Long) {
         items.update { list -> list.filterNot { it.id == id } }
     }
+
+    override suspend fun changedSince(since: Long): List<Note> = items.value.filter { it.changedAt > since }
+
+    override suspend fun findById(id: String): Note? = items.value.firstOrNull { it.id == id }
 }

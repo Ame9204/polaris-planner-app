@@ -22,11 +22,15 @@ class FakeScheduleDao : ScheduleDao {
                 .sortedWith(compareBy({ it.start }, { it.createdAt }))
         }
 
-    override suspend fun upsert(block: ScheduleBlock) {
+    override suspend fun upsertRaw(block: ScheduleBlock) {
         items.update { list -> list.filterNot { it.id == block.id } + block }
     }
 
-    override suspend fun delete(id: String) {
+    override suspend fun markDeleted(id: String, now: Long) {
         items.update { list -> list.filterNot { it.id == id } }
     }
+
+    override suspend fun changedSince(since: Long): List<ScheduleBlock> = items.value.filter { it.changedAt > since }
+
+    override suspend fun findById(id: String): ScheduleBlock? = items.value.firstOrNull { it.id == id }
 }

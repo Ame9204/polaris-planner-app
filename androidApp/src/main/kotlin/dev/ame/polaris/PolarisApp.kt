@@ -4,6 +4,7 @@ import android.app.Application
 import dev.ame.polaris.data.PolarisDatabase
 import dev.ame.polaris.data.createDatabase
 import dev.ame.polaris.reminders.ReminderEngine
+import dev.ame.polaris.sync.SyncManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,11 +21,15 @@ class PolarisApp : Application() {
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private val reminders by lazy { ReminderEngine(database) }
+
+    /** Cloud sync, running for as long as the app process lives. */
+    val sync: SyncManager by lazy { SyncManager(database, appScope) }
     private val reminderPlatform by lazy { AndroidReminderPlatform(this) }
 
     override fun onCreate() {
         super.onCreate()
         reminderPlatform.createChannel()
+        sync.start()
 
         // Re-plan reminders now, and again every time events, tasks or schedule blocks change,
         // so a new event's alarm is set the moment you save it.

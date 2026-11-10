@@ -66,6 +66,8 @@ import dev.ame.polaris.ui.hexCode
 import dev.ame.polaris.ui.StatBox
 import dev.ame.polaris.ui.SpecFooter
 import dev.ame.polaris.ui.BigArrow
+import dev.ame.polaris.sync.SyncBadge
+import dev.ame.polaris.sync.AccountDialog
 
 
 @Composable
@@ -83,6 +85,7 @@ fun OverviewScreen(
     val weather by weatherVm.state.collectAsState()
     val now by rememberCurrentTime()
     var weatherDialog by remember { mutableStateOf(false) }
+    var accountDialog by remember { mutableStateOf(false) }
 
     // Runs on open and again each time `now` ticks (every 30 s). It only actually
     // fetches when the saved weather is over 30 minutes old.
@@ -95,7 +98,7 @@ fun OverviewScreen(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Header(state.today, now, weather, onWeatherClick = { weatherDialog = true })
+            Header(state.today, now, weather, onWeatherClick = { weatherDialog = true }, onSyncClick = { accountDialog = true })
             StatsRow(todayStats(state.dueTasks, state.todayEvents, state.blocks, state.today, now))
             NowAndNextCard(nowAndNext(state.blocks, now), now, state.today)
 
@@ -126,6 +129,10 @@ fun OverviewScreen(
         }
     }
 
+    if (accountDialog) {
+        AccountDialog(onDismiss = { accountDialog = false })
+    }
+
     if (weatherDialog) {
         WeatherSettingsDialog(
             state = weather,
@@ -140,7 +147,13 @@ fun OverviewScreen(
 // ---------- Header ----------
 
 @Composable
-private fun Header(today: LocalDate, now: LocalTime, weather: WeatherUiState, onWeatherClick: () -> Unit) {
+private fun Header(
+    today: LocalDate,
+    now: LocalTime,
+    weather: WeatherUiState,
+    onWeatherClick: () -> Unit,
+    onSyncClick: () -> Unit,
+) {
     Row(verticalAlignment = Alignment.Top) {
         Column(Modifier.weight(1f)) {
             Text(longDate(today).uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
@@ -151,7 +164,11 @@ private fun Header(today: LocalDate, now: LocalTime, weather: WeatherUiState, on
                 color = MaterialTheme.colorScheme.onBackground,
             )
         }
-        WeatherBadge(weather, onClick = onWeatherClick)
+        // Weather, and under it the sync status (tap either to change things)
+        Column(horizontalAlignment = Alignment.End) {
+            WeatherBadge(weather, onClick = onWeatherClick)
+            SyncBadge(onClick = onSyncClick)
+        }
     }
 }
 

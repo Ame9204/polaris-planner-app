@@ -57,6 +57,10 @@ kotlin {
             implementation(libs.ktor.client.contentNegotiation)
             implementation(libs.ktor.serialization.json)
             implementation(libs.kotlinx.serialization.json)
+            // Cloud sync: Supabase (database + sign-in). The BOM keeps their versions in step.
+            implementation(project.dependencies.platform(libs.supabase.bom))
+            implementation(libs.supabase.postgrest)
+            implementation(libs.supabase.auth)
         }
         jvmMain.dependencies {
             implementation(libs.ktor.client.java)     // desktop's HTTP engine

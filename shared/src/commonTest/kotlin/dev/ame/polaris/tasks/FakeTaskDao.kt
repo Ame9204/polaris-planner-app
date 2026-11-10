@@ -29,19 +29,24 @@ class FakeTaskDao : TaskDao {
                 .take(limit)
         }
 
-    override suspend fun upsert(task: Task) {
+    override suspend fun upsertRaw(task: Task) {
         items.update { list -> list.filterNot { it.id == task.id } + task }
     }
 
-    override suspend fun toggleDone(id: String) {
+    override suspend fun toggleDoneAt(id: String, now: Long) {
         items.update { list -> list.map { if (it.id == id) it.copy(done = !it.done) else it } }
     }
 
-    override suspend fun setReminder(id: String, at: LocalDateTime?) {
+    override suspend fun setReminderAt(id: String, at: LocalDateTime?, now: Long) {
         items.update { list -> list.map { if (it.id == id) it.copy(remindAt = at) else it } }
     }
 
-    override suspend fun delete(id: String) {
+    // The fake simply removes deleted rows; the real deletion markers are tested in jvmTest.
+    override suspend fun markDeleted(id: String, now: Long) {
         items.update { list -> list.filterNot { it.id == id } }
     }
+
+    override suspend fun changedSince(since: Long): List<Task> = items.value.filter { it.changedAt > since }
+
+    override suspend fun findById(id: String): Task? = items.value.firstOrNull { it.id == id }
 }

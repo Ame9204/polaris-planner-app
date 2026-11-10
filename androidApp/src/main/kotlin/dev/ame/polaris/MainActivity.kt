@@ -30,9 +30,9 @@ class MainActivity : ComponentActivity() {
             askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
 
-        val database = (application as PolarisApp).database
+        val app = application as PolarisApp
         setContent {
-            App(database)
+            App(app.database, app.sync)
         }
     }
 }
