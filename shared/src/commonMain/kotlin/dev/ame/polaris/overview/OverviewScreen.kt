@@ -159,7 +159,7 @@ private fun Header(
             Text(longDate(today).uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             // Reads `now`, so the greeting changes by itself at 12:00 and 18:00.
             Text(
-                "${greetingFor(now.hour)}, Ame".uppercase(),
+                greetingFor(now.hour, today).uppercase(),
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.onBackground,
             )
@@ -176,9 +176,10 @@ private fun Header(
 @Composable
 private fun StatsRow(stats: TodayStats) {
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        StatBox(stats.tasksDue, "Tasks due", Page.Tasks.color, Modifier.weight(1f))
-        StatBox(stats.eventsToday, "Events today", Page.Calendar.color, Modifier.weight(1f))
-        StatBox(stats.blocksLeft, "Blocks left", Page.Schedule.color, Modifier.weight(1f))
+        // Same order and colours as the cards below: schedule (sage), events (terracotta), tasks (stone)
+        StatBox(stats.blocksLeft, "Blocks left", Panel.Sage, Modifier.weight(1f))
+        StatBox(stats.eventsToday, "Events today", Panel.Terracotta, Modifier.weight(1f))
+        StatBox(stats.tasksDue, "Tasks due", Panel.Stone, Modifier.weight(1f))
     }
 }
 

@@ -105,6 +105,7 @@ fun ScheduleScreen(
     val isWeek = state.view == ScheduleView.Week
 
     var dialog by remember { mutableStateOf<DialogTarget?>(null) }
+    var seriesChange by remember { mutableStateOf<SeriesChange?>(null) }
     var editingEvent by remember { mutableStateOf<CalendarEvent?>(null) }
     val undo = LocalUndo.current
 
@@ -156,7 +157,7 @@ fun ScheduleScreen(
             today = state.today,
             now = now,
             scroll = scroll,
-            onBlockClick = { dialog = DialogTarget.Edit(it) },
+            onBlockClick = { block, day -> dialog = DialogTarget.Edit(block, day) },
             onEventClick = { editingEvent = it },
             onEmptyTap = { day, time ->
                 // In Week view you're usually building your routine, so a block added by
@@ -168,9 +169,10 @@ fun ScheduleScreen(
     }
 
     dialog?.let { target ->
-        val existing = (target as? DialogTarget.Edit)?.block
+        val edit = target as? DialogTarget.Edit
+        val existing = edit?.block
         val new = target as? DialogTarget.New
-        val day = new?.day ?: state.date
+        val day = new?.day ?: edit?.day ?: state.date
         BlockDialog(
             existing = existing,
             initialStart = new?.start ?: LocalTime(9, 0),
@@ -178,16 +180,47 @@ fun ScheduleScreen(
             viewedDate = day,
             onDismiss = { dialog = null },
             onSave = { title, start, end, days, remind ->
-                vm.save(existing, title, start, end, days, onDate = day, remindMinutesBefore = remind)
                 dialog = null
+                if (existing != null && existing.repeats) {
+                    // A repeating block: ask whether this is for this day, the rest, or all days
+                    seriesChange = SeriesChange.Save(existing, day, BlockFields(title, start, end, days.toBits(), remind))
+                } else {
+                    vm.save(existing, title, start, end, days, onDate = day, remindMinutesBefore = remind)
+                }
             },
             onDelete = existing?.let { block ->
                 {
                     dialog = null
-                    vm.delete(block.id)
-                    // A repeating block disappears from every day, so say so in the Undo bar.
-                    val message = if (block.repeats) "Deleted \"${block.title}\" (${repeatLabel(block.days).lowercase()})" else "Block deleted"
-                    undo.offer(message) { vm.restore(block) }
+                    if (block.repeats) {
+                        seriesChange = SeriesChange.Delete(block, day)
+                    } else {
+                        vm.delete(block.id)
+                        undo.offer("Block deleted") { vm.restore(block) }
+                    }
+                }
+            },
+        )
+    }
+
+    seriesChange?.let { change ->
+        SeriesScopeDialog(
+            deleting = change is SeriesChange.Delete,
+            day = change.day,
+            onDismiss = { seriesChange = null },
+            onPick = { scope ->
+                seriesChange = null
+                when (change) {
+                    is SeriesChange.Save -> vm.saveSeries(change.block, change.day, scope, change.fields)
+                    is SeriesChange.Delete -> {
+                        vm.deleteSeries(change.block, change.day, scope)
+                        val what = when (scope) {
+                            SeriesScope.ThisDay -> "for ${shortDate(change.day)}"
+                            SeriesScope.Following -> "from ${shortDate(change.day)} on"
+                            SeriesScope.All -> "on all days"
+                        }
+                        // Undo puts the block back exactly as it was (series dates and all)
+                        undo.offer("Deleted \"${change.block.title}\" $what") { vm.restore(change.block) }
+                    }
                 }
             },
         )
@@ -227,7 +260,70 @@ private sealed interface DialogTarget {
      * [repeatOnTappedDay]: start with "repeats every <that weekday>" selected.
      */
     data class New(val start: LocalTime, val day: LocalDate, val repeatOnTappedDay: Boolean) : DialogTarget
-    data class Edit(val block: ScheduleBlock) : DialogTarget
+    /** Editing [block], opened from [day] (matters for "this day only" on repeating blocks). */
+    data class Edit(val block: ScheduleBlock, val day: LocalDate) : DialogTarget
+}
+
+/** A change to a repeating block, waiting for "this day / following / all days". */
+private sealed interface SeriesChange {
+    val block: ScheduleBlock
+    val day: LocalDate
+
+    data class Save(override val block: ScheduleBlock, override val day: LocalDate, val fields: BlockFields) : SeriesChange
+    data class Delete(override val block: ScheduleBlock, override val day: LocalDate) : SeriesChange
+}
+
+/** "Change / delete repeating block: This day only · This and following days · All days". */
+@Composable
+private fun SeriesScopeDialog(
+    deleting: Boolean,
+    day: LocalDate,
+    onDismiss: () -> Unit,
+    onPick: (SeriesScope) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (deleting) "Delete repeating block" else "Change repeating block") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "This block repeats. Which days should this apply to?",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(4.dp))
+                ScopeOption("This day only", shortDate(day), onClick = { onPick(SeriesScope.ThisDay) })
+                ScopeOption("This and following days", "from ${shortDate(day)} on", onClick = { onPick(SeriesScope.Following) })
+                // Deleting every day is the big one, so it's red
+                ScopeOption("All days", "the whole series", onClick = { onPick(SeriesScope.All) }, danger = deleting)
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/** One choice in the "which days?" dialog, drawn as an outlined button with an arrow. */
+@Composable
+private fun ScopeOption(label: String, detail: String, onClick: () -> Unit, danger: Boolean = false) {
+    val colors = MaterialTheme.colorScheme
+    val accent = if (danger) colors.error else colors.onSurface
+    val shape = RoundedCornerShape(14.dp)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(accent.copy(alpha = 0.06f))
+            .border(1.dp, accent.copy(alpha = if (danger) 0.7f else 0.28f), shape)
+            .clickable(onClick = onClick)
+            .padding(start = 16.dp, end = 10.dp, top = 12.dp, bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyLarge, color = accent)
+            Text(detail.uppercase(), style = MaterialTheme.typography.labelSmall, color = if (danger) accent else colors.onSurfaceVariant)
+        }
+        Icon(PolarisIcons.ChevronRight, contentDescription = null, tint = accent)
+    }
 }
 
 // ---------- The timeline ----------
@@ -306,7 +402,7 @@ private fun TimelineGrid(
     today: LocalDate,
     now: LocalTime,
     scroll: ScrollState,
-    onBlockClick: (ScheduleBlock) -> Unit,
+    onBlockClick: (ScheduleBlock, LocalDate) -> Unit,
     onEventClick: (CalendarEvent) -> Unit,
     onEmptyTap: (LocalDate, LocalTime) -> Unit,
     modifier: Modifier = Modifier,
@@ -371,7 +467,7 @@ private fun TimelineGrid(
                             compact = compact,
                             isNow = isNow,
                             isPast = isPast,
-                            onClick = { onBlockClick(entry.block) },
+                            onClick = { onBlockClick(entry.block, day) },
                         )
                         is TimelineEntry.Event -> EventBox(
                             entry = entry,

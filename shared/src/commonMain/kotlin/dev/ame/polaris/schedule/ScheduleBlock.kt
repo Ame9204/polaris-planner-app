@@ -31,6 +31,14 @@ data class ScheduleBlock(
      */
     @ColumnInfo(defaultValue = "0")
     val remindMinutesBefore: Int? = 0,
+    // ---- For repeating blocks: which stretch of days the series covers ----
+    /** The first day it repeats on (null = no start limit). Set when a series is split. */
+    val startsOn: LocalDate? = null,
+    /** The last day it repeats on (null = forever). Set by "this and following days". */
+    val endsOn: LocalDate? = null,
+    /** Days left out of the series, as "2026-11-10,2026-11-17" (by "this day only"). */
+    @ColumnInfo(defaultValue = "''")
+    val skipDates: String = "",
     // ---- Sync bookkeeping (the app's screens never show these) ----
     /** When this row last changed, on any device (ms since 1970). The newest change wins. */
     @ColumnInfo(defaultValue = "0")

@@ -69,6 +69,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.fillMaxHeight
 
 @Composable
 fun CalendarScreen(
@@ -182,21 +184,32 @@ private fun MonthView(
         }
         Spacer(Modifier.height(4.dp))
 
-        // 42 days -> 6 rows of 7
+        // 42 days -> 6 rows of 7. Multi-day events are drawn as bars across each row,
+        // on top of the cells; each cell leaves room for them above its own chips.
+        val allEvents = remember(state.events) { state.events.values.flatten().distinctBy { it.id } }
         state.days.chunked(7).forEach { week ->
-            Row {
-                week.forEach { date ->
-                    DayCell(
-                        date = date,
-                        inMonth = date.month == state.month.month,
-                        isToday = date == state.today,
-                        isSelected = date == state.selected,
-                        chips = dayChips(state.events[date].orEmpty(), state.tasks[date].orEmpty()),
-                        maxChips = maxChips,
-                        onClick = { onSelect(date) },
-                        modifier = Modifier.weight(1f).height(cellHeight),
-                    )
+            val bars = remember(week, allEvents) { weekBars(week, allEvents) }
+            val lanes = minOf((bars.maxOfOrNull { it.lane } ?: -1) + 1, maxChips)
+            Box(Modifier.fillMaxWidth().height(cellHeight)) {
+                Row {
+                    week.forEachIndexed { col, date ->
+                        // Bars that didn't fit on this day still count towards its "+N"
+                        val hiddenBars = bars.count { it.lane >= lanes && col in it.startCol..it.endCol }
+                        DayCell(
+                            date = date,
+                            inMonth = date.month == state.month.month,
+                            isToday = date == state.today,
+                            isSelected = date == state.selected,
+                            chips = dayChips(state.events[date].orEmpty(), state.tasks[date].orEmpty()),
+                            maxChips = maxChips,
+                            barLanes = lanes,
+                            hiddenBars = hiddenBars,
+                            onClick = { onSelect(date) },
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                        )
+                    }
                 }
+                WeekBarsOverlay(bars.filter { it.lane < lanes }, week, onSelect)
             }
         }
     }
@@ -214,6 +227,8 @@ private fun DayCell(
     isSelected: Boolean,
     chips: List<DayChip>,
     maxChips: Int,
+    barLanes: Int,
+    hiddenBars: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -245,12 +260,16 @@ private fun DayCell(
                 color = if (isToday) colors.onPrimary else colors.onBackground,
             )
         }
-        // If everything doesn't fit, keep one slot for "+N"
-        val shown = if (chips.size > maxChips) chips.take(maxChips - 1) else chips
+        // Room for the week's multi-day bars (drawn over the cells by WeekBarsOverlay)
+        if (barLanes > 0) Spacer(Modifier.height(ChipSlot * barLanes - ChipGap))
+        // The rest is for this day's own chips; if they don't all fit, keep one slot for "+N"
+        val room = (maxChips - barLanes).coerceAtLeast(0)
+        val shown = if (chips.size > room) chips.take((room - 1).coerceAtLeast(0)) else chips
         shown.forEach { DayChipLabel(it) }
-        if (chips.size > shown.size) {
+        val hidden = chips.size - shown.size + hiddenBars
+        if (hidden > 0) {
             Text(
-                "+${chips.size - shown.size}",
+                "+$hidden",
                 modifier = Modifier.padding(start = 3.dp),
                 style = MaterialTheme.typography.labelSmall,
                 color = colors.onSurfaceVariant,
@@ -262,9 +281,12 @@ private fun DayCell(
 /** What a cell shows for one event or task. */
 private data class DayChip(val title: String, val isEvent: Boolean, val done: Boolean = false)
 
-/** All-day events first, then timed events by start time, then tasks due that day. */
+/**
+ * All-day events first, then timed events by start time, then tasks due that day.
+ * (Multi-day events aren't chips: they're bars across the week.)
+ */
 private fun dayChips(events: List<CalendarEvent>, tasks: List<Task>): List<DayChip> =
-    events.sortedWith(compareBy(nullsFirst()) { it.start }).map { DayChip(it.title, isEvent = true) } +
+    events.filter { !it.isMultiDay }.sortedWith(compareBy(nullsFirst()) { it.start }).map { DayChip(it.title, isEvent = true) } +
         tasks.map { DayChip(it.title, isEvent = false, done = it.done) }
 
 /** Events: a gold-tinted chip. Tasks: a grey one, crossed out when done. */
@@ -275,6 +297,7 @@ private fun DayChipLabel(chip: DayChip) {
         chip.title,
         modifier = Modifier
             .fillMaxWidth()
+            .height(ChipHeight)
             .clip(RoundedCornerShape(4.dp))
             .background(if (chip.isEvent) colors.primary.copy(alpha = 0.30f) else colors.onSurfaceVariant.copy(alpha = 0.16f))
             .padding(horizontal = 3.dp, vertical = 1.dp),
@@ -392,4 +415,54 @@ private fun timeLabel(event: CalendarEvent): String {
     val start = event.start ?: return "All day"
     val end = event.end ?: return hhmm(start)
     return "${hhmm(start)}–${hhmm(end)}"
+}
+
+// ---------- Multi-day bars ----------
+
+// Cell geometry, so the bars line up with the chip rows inside each cell
+private val ChipHeight = 16.dp
+private val ChipGap = 2.dp
+private val ChipSlot = ChipHeight + ChipGap
+/** From the top of a cell to its first chip row: outer padding + top padding + date circle + gap. */
+private val FirstChipTop = 1.dp + 3.dp + 22.dp + ChipGap
+
+/**
+ * Draws one week row's multi-day events as continuous bars, Google Calendar style.
+ * Rounded ends only where the event really starts/ends; square where it continues
+ * from the previous week or into the next. Tapping a bar selects its first day here.
+ */
+@Composable
+private fun WeekBarsOverlay(bars: List<WeekBar>, week: List<LocalDate>, onSelect: (LocalDate) -> Unit) {
+    if (bars.isEmpty()) return
+    val colors = MaterialTheme.colorScheme
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val col = maxWidth / 7
+        bars.forEach { bar ->
+            val round = 4.dp
+            val shape = RoundedCornerShape(
+                topStart = if (bar.continuesBefore) 0.dp else round,
+                bottomStart = if (bar.continuesBefore) 0.dp else round,
+                topEnd = if (bar.continuesAfter) 0.dp else round,
+                bottomEnd = if (bar.continuesAfter) 0.dp else round,
+            )
+            // Inset a little where the bar really starts/ends, to line up with the cells' chips
+            val startInset = if (bar.continuesBefore) 0.dp else 3.dp
+            val endInset = if (bar.continuesAfter) 0.dp else 3.dp
+            Text(
+                bar.event.title,
+                modifier = Modifier
+                    .offset(x = col * bar.startCol + startInset, y = FirstChipTop + ChipSlot * bar.lane)
+                    .width(col * bar.span - startInset - endInset)
+                    .height(ChipHeight)
+                    .clip(shape)
+                    .background(colors.primary.copy(alpha = 0.55f))
+                    .clickable { onSelect(week[bar.startCol]) }
+                    .padding(horizontal = 4.dp, vertical = 1.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
 }

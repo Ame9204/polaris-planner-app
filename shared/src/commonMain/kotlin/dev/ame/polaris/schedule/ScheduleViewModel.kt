@@ -165,6 +165,22 @@ class ScheduleViewModel(
         viewModelScope.launch { eventDao.upsert(event) }
     }
 
+    /** Saves an edit to a repeating block, for just [day], from [day] on, or for all days. */
+    fun saveSeries(original: ScheduleBlock, day: LocalDate, scope: SeriesScope, fields: BlockFields) {
+        if (fields.title.isBlank() || fields.end <= fields.start) return
+        val rows = editSeries(original, day, scope, fields.copy(title = fields.title.trim()), ::newId, nowMillis())
+        viewModelScope.launch { rows.forEach { dao.upsert(it) } }
+    }
+
+    /** Deletes a repeating block for just [day], from [day] on, or entirely. */
+    fun deleteSeries(original: ScheduleBlock, day: LocalDate, scope: SeriesScope) {
+        val (rows, deleteAll) = deleteFromSeries(original, day, scope)
+        viewModelScope.launch {
+            rows.forEach { dao.upsert(it) }
+            if (deleteAll) dao.delete(original.id)
+        }
+    }
+
     /** Puts a deleted block back, on every day it repeated (for Undo). */
     fun restore(block: ScheduleBlock) {
         viewModelScope.launch { dao.upsert(block) }

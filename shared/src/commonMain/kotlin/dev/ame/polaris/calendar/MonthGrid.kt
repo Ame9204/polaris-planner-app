@@ -29,3 +29,48 @@ fun monthTitle(month: LocalDate): String = "${month.month.name.titleCase()} ${mo
 
 /** "Sun", "Mon" … in the app's week order (see util/Week.kt). */
 val WeekdayLabels: List<String> = WeekOrder.map { it.name.take(3).titleCase() }
+
+// ---------- Multi-day events as continuous bars ----------
+
+/**
+ * One multi-day event's bar within one week row of the grid: from column [startCol] to
+ * [endCol] (0–6), in row [lane] (0 = top). [continuesBefore]/[continuesAfter] say the
+ * event carries on from the previous week / into the next, so that end is drawn square.
+ */
+data class WeekBar(
+    val event: CalendarEvent,
+    val startCol: Int,
+    val endCol: Int,
+    val lane: Int,
+    val continuesBefore: Boolean,
+    val continuesAfter: Boolean,
+) {
+    val span: Int get() = endCol - startCol + 1
+}
+
+/**
+ * Lays out the multi-day events that touch [week] (7 days), like Google Calendar's month view:
+ * earlier and longer events take the top rows, and each bar takes the highest row that's
+ * free across all its days, so bars never overlap.
+ */
+fun weekBars(week: List<LocalDate>, events: List<CalendarEvent>): List<WeekBar> {
+    val first = week.first()
+    val last = week.last()
+    val touching = events
+        .filter { it.isMultiDay && it.date <= last && it.lastDate >= first }
+        .distinctBy { it.id }
+        .sortedWith(compareBy<CalendarEvent>({ it.date }, { -(it.lastDate.toEpochDays() - it.date.toEpochDays()) }, { it.createdAt }))
+    val laneEnds = mutableListOf<Int>() // last column used in each row
+    return touching.map { event ->
+        val startCol = if (event.date < first) 0 else week.indexOf(event.date)
+        val endCol = if (event.lastDate > last) 6 else week.indexOf(event.lastDate)
+        var lane = laneEnds.indexOfFirst { it < startCol }
+        if (lane == -1) {
+            laneEnds += endCol
+            lane = laneEnds.lastIndex
+        } else {
+            laneEnds[lane] = endCol
+        }
+        WeekBar(event, startCol, endCol, lane, continuesBefore = (event.date < first), continuesAfter = (event.lastDate > last))
+    }
+}

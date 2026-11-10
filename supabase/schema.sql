@@ -44,6 +44,9 @@ create table if not exists public.schedule_blocks (
     days                   integer not null default 0,
     date                   date,
     remind_minutes_before  integer,
+    starts_on              date,
+    ends_on                date,
+    skip_dates             text not null default '',
     created_at             bigint not null,
     changed_at             bigint not null default 0,
     deleted                boolean not null default false,
@@ -62,6 +65,11 @@ create table if not exists public.notes (
     deleted     boolean not null default false,
     synced_at   timestamptz not null default now()
 );
+
+-- Added later (safe to run again): series start/end and skipped days for repeating blocks
+alter table public.schedule_blocks add column if not exists starts_on  date;
+alter table public.schedule_blocks add column if not exists ends_on    date;
+alter table public.schedule_blocks add column if not exists skip_dates text not null default '';
 
 -- Devices ask "what changed since I last looked?", so index the time the server accepted it
 create index if not exists tasks_sync_idx           on public.tasks (user_id, synced_at);

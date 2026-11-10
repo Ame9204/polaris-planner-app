@@ -52,6 +52,9 @@ data class BlockRow(
     val days: Int,
     val date: LocalDate?,
     @SerialName("remind_minutes_before") val remindMinutesBefore: Int?,
+    @SerialName("starts_on") val startsOn: LocalDate? = null,
+    @SerialName("ends_on") val endsOn: LocalDate? = null,
+    @SerialName("skip_dates") val skipDates: String = "",
     @SerialName("created_at") val createdAt: Long,
     @SerialName("changed_at") val changedAt: Long,
     val deleted: Boolean,
@@ -148,12 +151,16 @@ fun syncTables(db: PolarisDatabase): List<SyncTable<*, *>> {
         SyncTable(
             "schedule_blocks", BlockRow.serializer(), blocks::changedSince, blocks::findById, blocks::upsertRaw,
             toRow = {
-                BlockRow(it.id, it.title, it.start, it.end, it.days, it.date, it.remindMinutesBefore, it.createdAt, it.changedAt, it.deleted)
+                BlockRow(
+                    it.id, it.title, it.start, it.end, it.days, it.date, it.remindMinutesBefore,
+                    it.startsOn, it.endsOn, it.skipDates, it.createdAt, it.changedAt, it.deleted,
+                )
             },
             fromRow = {
                 ScheduleBlock(
                     id = it.id, title = it.title, start = it.start, end = it.end, days = it.days, date = it.date,
                     createdAt = it.createdAt, remindMinutesBefore = it.remindMinutesBefore,
+                    startsOn = it.startsOn, endsOn = it.endsOn, skipDates = it.skipDates,
                     changedAt = it.changedAt, deleted = it.deleted,
                 )
             },

@@ -13,10 +13,62 @@ import kotlinx.datetime.LocalTime
 /** How many events and tasks the Overview cards show: the closest few, however far ahead. */
 const val GlanceCount = 3
 
-fun greetingFor(hour: Int): String = when (hour) {
-    in 5..11 -> "Good Morning"
-    in 12..17 -> "Good Afternoon"
-    else -> "Good Evening"
+/**
+ * The greeting at the top of Overview, by time of day. Each part of the day has a few
+ * versions; "%s" is where the name goes. Add your own lines to any list.
+ */
+private val Greetings: List<Pair<IntRange, List<String>>> = listOf(
+    0..3 to listOf(
+        "Still up, %s?",
+        "Burning the midnight oil, %s?",
+        "Night owl mode, %s",
+        "The stars are out, %s",
+        "Shouldn't you be asleep, %s?",
+    ),
+    4..5 to listOf(
+        "Up before the sun, %s",
+        "Early bird, %s",
+        "The world's still quiet, %s",
+    ),
+    6..11 to listOf(
+        "Good morning, %s",
+        "Rise and shine, %s",
+        "Morning, %s. Coffee first",
+        "Fresh day, %s",
+        "Let's get going, %s",
+    ),
+    12..13 to listOf(
+        "Good afternoon, %s",
+        "Lunch o'clock, %s",
+        "Halfway there, %s",
+    ),
+    14..17 to listOf(
+        "Good afternoon, %s",
+        "Keep it rolling, %s",
+        "Afternoon push, %s",
+        "Still going strong, %s?",
+    ),
+    18..20 to listOf(
+        "Good evening, %s",
+        "Evening, %s",
+        "Day's winding down, %s",
+    ),
+    21..23 to listOf(
+        "Winding down, %s?",
+        "Almost bedtime, %s",
+        "Good evening, %s",
+        "Rest up, %s",
+    ),
+)
+
+/**
+ * The greeting for [hour] (0–23). Which version you get depends on [today], so it stays
+ * the same all day (no flickering as the screen refreshes) and changes the next day.
+ */
+fun greetingFor(hour: Int, today: LocalDate, name: String = "Ame"): String {
+    val options = Greetings.first { hour in it.first }.second
+    val pick = (today.toEpochDays() % options.size).toInt().let { if (it < 0) it + options.size else it }
+    return options[pick].replace("%s", name)
 }
 
 /** The block happening now (if any) and the next one to start today (if any). */

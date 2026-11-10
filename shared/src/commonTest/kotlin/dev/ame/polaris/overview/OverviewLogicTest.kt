@@ -17,10 +17,12 @@ class OverviewLogicTest {
 
     @Test
     fun greetings() {
-        assertEquals("Good Morning", greetingFor(8))
-        assertEquals("Good Afternoon", greetingFor(14))
-        assertEquals("Good Evening", greetingFor(21))
-        assertEquals("Good Evening", greetingFor(2))
+        // Every hour has a greeting, with the name in it
+        for (hour in 0..23) assert("Ame" in greetingFor(hour, today)) { "hour $hour" }
+        // Late night gets late-night lines, morning gets morning ones
+        assert(greetingFor(1, today) != greetingFor(9, today))
+        // Same all day, so it doesn't flicker
+        assertEquals(greetingFor(9, today), greetingFor(10, today))
     }
 
     @Test

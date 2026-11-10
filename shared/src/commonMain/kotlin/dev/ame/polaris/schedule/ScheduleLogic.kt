@@ -98,8 +98,95 @@ fun timeline(blocks: List<ScheduleBlock>, minFreeMinutes: Int = 15): List<Timeli
 // ---------- Weeks ----------
 
 /** Does this block happen on [day]? (A one-off on that date, or repeating on that weekday.) */
-fun ScheduleBlock.happensOn(day: LocalDate): Boolean =
-    date == day || (days and day.dayOfWeek.bit()) != 0
+fun ScheduleBlock.happensOn(day: LocalDate): Boolean = when {
+    !repeats -> date == day
+    (days and day.dayOfWeek.bit()) == 0 -> false
+    startsOn != null && day < startsOn -> false
+    endsOn != null && day > endsOn -> false
+    else -> day !in skippedDays
+}
+
+/** The days left out of a repeating block's series. */
+val ScheduleBlock.skippedDays: Set<LocalDate>
+    get() = skipDates.split(',').filter { it.isNotBlank() }.map { LocalDate.parse(it) }.toSet()
+
+/** The same block with [day] left out of its series. */
+fun ScheduleBlock.skipping(day: LocalDate): ScheduleBlock =
+    copy(skipDates = (skippedDays + day).sorted().joinToString(","))
+
+// ---------- Changing one day, the rest, or all of a repeating block ----------
+
+/** Which days a change to a repeating block applies to (like Google Calendar asks). */
+enum class SeriesScope { ThisDay, Following, All }
+
+/** What you typed in the block dialog. */
+data class BlockFields(
+    val title: String,
+    val start: LocalTime,
+    val end: LocalTime,
+    val days: Int,
+    val remindMinutesBefore: Int?,
+)
+
+/**
+ * The blocks to save when you edit [original] (a repeating block) as seen on [day].
+ *  - ThisDay: the series skips [day], and a one-off copy with your changes takes its place.
+ *  - Following: the series ends the day before; a new series with your changes starts on [day].
+ *  - All: the whole series changes.
+ * New blocks get ids from [newId] and [now] as their creation time.
+ */
+fun editSeries(
+    original: ScheduleBlock,
+    day: LocalDate,
+    scope: SeriesScope,
+    fields: BlockFields,
+    newId: () -> String,
+    now: Long,
+): List<ScheduleBlock> {
+    fun ScheduleBlock.withFields() = copy(
+        title = fields.title,
+        start = fields.start,
+        end = fields.end,
+        days = fields.days,
+        remindMinutesBefore = fields.remindMinutesBefore,
+        // switched to "Once": it becomes a one-off on the day you were looking at
+        date = if (fields.days == 0) day else null,
+    )
+    val isFirstDay = original.startsOn != null && day <= original.startsOn
+    return when {
+        scope == SeriesScope.All || (scope == SeriesScope.Following && isFirstDay) ->
+            listOf(original.withFields())
+        scope == SeriesScope.ThisDay -> listOf(
+            original.skipping(day),
+            ScheduleBlock(
+                id = newId(), title = fields.title, start = fields.start, end = fields.end,
+                days = 0, date = day, createdAt = now, remindMinutesBefore = fields.remindMinutesBefore,
+            ),
+        )
+        else -> listOf( // Following
+            original.copy(endsOn = day.minus(1, DateTimeUnit.DAY)),
+            original.withFields().copy(
+                id = newId(),
+                createdAt = now,
+                startsOn = if (fields.days == 0) null else day,
+                skipDates = original.skippedDays.filter { it >= day }.sorted().joinToString(","),
+            ),
+        )
+    }
+}
+
+/**
+ * Deleting [original] (a repeating block) as seen on [day]:
+ * returns the blocks to save, and whether to delete the block entirely.
+ */
+fun deleteFromSeries(original: ScheduleBlock, day: LocalDate, scope: SeriesScope): Pair<List<ScheduleBlock>, Boolean> {
+    val isFirstDay = original.startsOn != null && day <= original.startsOn
+    return when {
+        scope == SeriesScope.All || (scope == SeriesScope.Following && isFirstDay) -> emptyList<ScheduleBlock>() to true
+        scope == SeriesScope.ThisDay -> listOf(original.skipping(day)) to false
+        else -> listOf(original.copy(endsOn = day.minus(1, DateTimeUnit.DAY))) to false
+    }
+}
 
 /** The week (7 days, from the app's first day of the week) that contains [date]. */
 fun weekOf(date: LocalDate): List<LocalDate> {

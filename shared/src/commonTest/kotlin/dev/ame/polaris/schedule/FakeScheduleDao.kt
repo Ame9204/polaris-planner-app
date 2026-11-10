@@ -10,13 +10,13 @@ import kotlinx.datetime.LocalDate
 class FakeScheduleDao : ScheduleDao {
     val items = MutableStateFlow<List<ScheduleBlock>>(emptyList())
 
-    override fun observeForDay(date: LocalDate, dayBit: Int): Flow<List<ScheduleBlock>> =
+    override fun observeForDayRaw(date: LocalDate, dayBit: Int): Flow<List<ScheduleBlock>> =
         items.map { list ->
             list.filter { it.date == date || (it.days and dayBit) != 0 }
                 .sortedWith(compareBy({ it.start }, { it.createdAt }))
         }
 
-    override fun observeForRange(from: LocalDate, to: LocalDate): Flow<List<ScheduleBlock>> =
+    override fun observeForRangeRaw(from: LocalDate, to: LocalDate): Flow<List<ScheduleBlock>> =
         items.map { list ->
             list.filter { it.days != 0 || (it.date != null && it.date in from..to) }
                 .sortedWith(compareBy({ it.start }, { it.createdAt }))
